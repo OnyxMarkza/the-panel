@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find . -not -path */node_modules*)",
+      "Bash(grep -v '^$')",
+      "Bash(grep -E '\\\\.\\(js|json|md|gitignore\\)$')",
+      "Bash(npm install:*)"
+    ]
+  }
+}
