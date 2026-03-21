@@ -35,7 +35,13 @@ function resolveVaultRoot() {
 }
 
 const VAULT_ROOT = resolveVaultRoot();
-const DEBATES_DIR = path.join(VAULT_ROOT, 'Claude Projects', 'the-panel', 'debates');
+
+// Configurable folder structure for debates (defaults to original structure)
+const DEBATES_FOLDER_1 = process.env.DEBATES_FOLDER_1 || 'Claude Projects';
+const DEBATES_FOLDER_2 = process.env.DEBATES_FOLDER_2 || 'the-panel';
+const DEBATES_FOLDER_3 = process.env.DEBATES_FOLDER_3 || 'debates';
+
+const DEBATES_DIR = path.join(VAULT_ROOT, DEBATES_FOLDER_1, DEBATES_FOLDER_2, DEBATES_FOLDER_3);
 
 // Ensure the debates directory exists
 fs.mkdirSync(DEBATES_DIR, { recursive: true });

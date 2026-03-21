@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  root: '.',  // client/ is the root for Vite
+  root: 'client',  // index.html lives in client/, resolve from project root
   plugins: [react()],
   server: {
     port: 5173,

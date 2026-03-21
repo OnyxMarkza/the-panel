@@ -1,11 +1,6 @@
 import { Router } from 'express';
 import { writeDebate } from '../lib/vaultWriter.js';
-import {
-  insertDebate,
-  insertPersonas,
-  insertMessages,
-  updateDebateSummary,
-} from '../lib/supabase.js';
+import { saveDebateToSupabase } from '../lib/supabase.js';
 
 const router = Router();
 
@@ -23,6 +18,17 @@ const router = Router();
  * Messages are stored flat; round_number is derived from index and persona count.
  */
 router.post('/save-to-obsidian', async (req, res) => {
+  // Simple API key authentication
+  const apiKey = req.headers['x-api-key'] || req.query.apiKey;
+  const expectedKey = process.env.SAVE_API_KEY;
+
+  if (expectedKey && apiKey !== expectedKey) {
+    return res.status(401).json({
+      error: true,
+      message: 'Invalid or missing API key.',
+    });
+  }
+
   const { topic, personas, history, summary, verdict } = req.body;
 
   if (!topic || !personas || !history || !summary) {
@@ -44,33 +50,16 @@ router.post('/save-to-obsidian', async (req, res) => {
   }
 
   // -------------------------------------------------------------------------
-  // Step 2: Save to Supabase (async, non-blocking on failure)
+  // Step 2: Save to Supabase (non-blocking on failure)
   // Any error here is logged but does NOT fail the HTTP response.
   // -------------------------------------------------------------------------
   let debateId = null;
   try {
-    // 2a. Create the debate row and get its UUID.
-    debateId = await insertDebate(topic);
-
-    // 2b. Insert all personas and get back a { name -> uuid } map.
-    const personaIdMap = await insertPersonas(debateId, personas);
-
-    // 2c. Map the flat history array to message rows.
-    // Each round has personas.length messages (one per persona, in order).
-    // We derive round_number and message_order from the message's position.
-    const personaCount = personas.length;
-    const messageRows = history.map((msg, index) => ({
-      personaName: msg.persona,              // matches the key used in debate.js
-      content: msg.content,
-      roundNumber: Math.floor(index / personaCount) + 1,  // 1-based round
-      messageOrder: index % personaCount,                  // position within the round
-    }));
-
-    await insertMessages(debateId, messageRows, personaIdMap);
-
-    // 2d. Attach the summary, verdict, and vault path to the debate row.
-    await updateDebateSummary(debateId, summary, verdict, filePath);
-
+    const result = await saveDebateToSupabase({
+      topic, personas, history, summary, verdict,
+      obsidianPath: filePath,
+    });
+    debateId = result.id;
     console.log(`[obsidian] Saved to Supabase: debate ${debateId}`);
   } catch (err) {
     // Log the error but don't let it fail the response -- Obsidian save succeeded.

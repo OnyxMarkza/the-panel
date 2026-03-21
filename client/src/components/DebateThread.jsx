@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * DebateThread — Scrolling transcript of the debate.
@@ -53,14 +53,27 @@ function TypewriterMessage({ content, colour, isNew }) {
   );
 }
 
-export default function DebateThread({ history, personas, typingIndex }) {
+export default function DebateThread({ history, personas, typingIndex, currentRound, totalRounds }) {
   const bottomRef = useRef(null);
 
-  // Build a name -> colour map from the personas array
-  const colourMap = {};
-  personas.forEach((p, i) => {
-    colourMap[p.name] = PERSONA_COLOURS[i] ?? 'var(--text-primary)';
-  });
+  // Build name -> colour and name -> archetype maps from the personas array.
+  // Wrapped in useMemo so they're only recalculated if the personas array changes,
+  // not on every render triggered by new messages arriving.
+  const colourMap = useMemo(() => {
+    const map = {};
+    personas.forEach((p, i) => {
+      map[p.name] = PERSONA_COLOURS[i] ?? 'var(--text-primary)';
+    });
+    return map;
+  }, [personas]);
+
+  const archetypeMap = useMemo(() => {
+    const map = {};
+    personas.forEach((p) => {
+      map[p.name] = p.archetype;
+    });
+    return map;
+  }, [personas]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -73,6 +86,23 @@ export default function DebateThread({ history, personas, typingIndex }) {
     <div style={styles.wrapper}>
       <h2 style={styles.heading}>Debate Transcript</h2>
 
+      {/* Progress indicator */}
+      {currentRound > 0 && currentRound <= totalRounds && (
+        <div style={styles.progressContainer}>
+          <div style={styles.progressLabel}>
+            Round {currentRound} of {totalRounds}
+          </div>
+          <div style={styles.progressBar}>
+            <div
+              style={{
+                ...styles.progressFill,
+                width: `${(currentRound / totalRounds) * 100}%`
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       <div style={styles.thread}>
         {history.map((msg, i) => {
           const colour = colourMap[msg.persona] ?? 'var(--text-primary)';
@@ -80,15 +110,22 @@ export default function DebateThread({ history, personas, typingIndex }) {
 
           return (
             <div
-              key={i}
+              key={`${msg.persona}-${i}`}
               style={{
                 ...styles.entry,
                 animationDelay: `${i * 60}ms`,
               }}
             >
-              {/* Persona label */}
-              <div style={{ ...styles.speaker, color: colour }}>
-                {msg.persona}
+              {/* Persona label with professional title */}
+              <div style={styles.speakerRow}>
+                <span style={{ ...styles.speaker, color: colour }}>
+                  {msg.persona}
+                </span>
+                {archetypeMap[msg.persona] && (
+                  <span style={styles.speakerTitle}>
+                    ({archetypeMap[msg.persona]})
+                  </span>
+                )}
               </div>
 
               {/* Message body */}
@@ -115,12 +152,13 @@ const styles = {
     animation: 'fadeIn 0.4s var(--ease-out)',
   },
   heading: {
-    /* Global h2 styles apply (Playfair Display, 2rem) — override here for compactness */
-    fontFamily: "'Playfair Display', serif",
-    fontSize: '1.1rem',
+    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
+    fontStyle: 'italic',
+    fontSize: '1.15rem',
     color: 'var(--gold)',
     borderBottom: '1px solid var(--border)',
     paddingBottom: 'var(--spacing-xs)',
+    opacity: 0.85,
   },
   thread: {
     display: 'flex',
@@ -133,12 +171,25 @@ const styles = {
     gap: '0.4rem',
     animation: 'fadeInUp 0.35s var(--ease-out) both',
   },
+  speakerRow: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '0.4rem',
+    flexWrap: 'wrap',
+  },
   speaker: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
     fontWeight: '700',
-    fontSize: '0.9rem',
-    letterSpacing: '0.03em',
+    fontSize: '1rem',
+    letterSpacing: '0.02em',
     lineHeight: '1.2',
+  },
+  speakerTitle: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.68rem',
+    color: 'var(--text-muted)',
+    letterSpacing: '0.02em',
+    opacity: 0.7,
   },
   messageText: {
     display: 'block',
@@ -155,5 +206,32 @@ const styles = {
     animation: 'pulse 0.9s ease infinite',
     color: 'var(--gold)',
     marginLeft: '1px',
+  },
+  progressContainer: {
+    marginBottom: 'var(--spacing-lg)',
+    padding: 'var(--spacing-md)',
+    background: 'var(--bg-card)',
+    borderRadius: '6px',
+    border: '1px solid var(--border)',
+  },
+  progressLabel: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.875rem',
+    color: 'var(--text-primary)',
+    marginBottom: 'var(--spacing-xs)',
+    textAlign: 'center',
+  },
+  progressBar: {
+    width: '100%',
+    height: '4px',
+    background: 'var(--border)',
+    borderRadius: '2px',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    background: 'var(--gold)',
+    borderRadius: '2px',
+    transition: 'width 0.3s var(--ease-out)',
   },
 };

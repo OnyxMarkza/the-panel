@@ -220,7 +220,8 @@ export async function searchDebates(query, limit = 20) {
 // ---------------------------------------------------------------------------
 
 /**
- * Save a complete debate in one call. Used by shared/storageAdapter.js.
+ * Save a complete debate in one call. Used by shared/storageAdapter.js and
+ * server/routes/obsidian.js.
  *
  * This wraps insertDebate, insertPersonas, insertMessages, and
  * updateDebateSummary into a single transaction-like sequence.
@@ -232,9 +233,10 @@ export async function searchDebates(query, limit = 20) {
  * @param {Array<{persona: string, content: string}>} params.history
  * @param {string} params.summary
  * @param {string} params.verdict
+ * @param {string} [params.obsidianPath] - Optional vault file path to store alongside the record
  * @returns {Promise<{ id: string }>}
  */
-export async function saveDebateToSupabase({ topic, personas, history, summary, verdict }) {
+export async function saveDebateToSupabase({ topic, personas, history, summary, verdict, obsidianPath }) {
   // Create the parent debate row first so we have an ID for foreign keys
   const debateId = await insertDebate(topic);
 
@@ -250,12 +252,14 @@ export async function saveDebateToSupabase({ topic, personas, history, summary, 
     personaName: msg.persona,
     content: msg.content,
     roundNumber: Math.floor(index / numPersonas) + 1,
-    messageOrder: index,
+    // Position within the round (0-based), matching the schema comment.
+    // e.g. for 5 personas: 0,1,2,3,4 | 0,1,2,3,4 | 0,1,2,3,4
+    messageOrder: index % numPersonas,
   }));
   await insertMessages(debateId, messages, personaIdMap);
 
-  // Attach summary and verdict to the debate row
-  await updateDebateSummary(debateId, summary, verdict);
+  // Attach summary, verdict, and optional Obsidian vault path to the debate row
+  await updateDebateSummary(debateId, summary, verdict, obsidianPath);
 
   return { id: debateId };
 }

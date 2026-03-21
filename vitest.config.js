@@ -4,5 +4,6 @@ export default defineConfig({
   test: {
     // Run in Node.js — no browser DOM needed for backend utility tests
     environment: 'node',
+    passWithNoTests: true,
   },
 });

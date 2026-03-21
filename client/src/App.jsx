@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from './components/Header.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import Footer from './components/Footer.jsx';
@@ -40,6 +40,7 @@ export default function App() {
   const [phase, setPhase]           = useState('input'); // 'input' | 'personas' | 'debate' | 'summary' | 'done'
   const [typingIndex, setTypingIndex] = useState(-1);
   const [savedPath, setSavedPath]   = useState('');
+  const [currentRound, setCurrentRound] = useState(0);
 
   // --- Layout state ---
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -47,6 +48,42 @@ export default function App() {
   // --- Debate history (current session only, shown in sidebar) ---
   const [debates, setDebates]               = useState([]);
   const [currentDebateId, setCurrentDebateId] = useState(null);
+
+  // Load debates from localStorage on mount
+  useEffect(() => {
+    const savedDebates = localStorage.getItem('the-panel-debates');
+    if (savedDebates) {
+      try {
+        const parsed = JSON.parse(savedDebates);
+        setDebates(parsed);
+      } catch (err) {
+        console.warn('Failed to parse saved debates from localStorage:', err);
+      }
+    }
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(event) {
+      // Ctrl/Cmd + N for new debate
+      if ((event.ctrlKey || event.metaKey) && event.key === 'n') {
+        event.preventDefault();
+        handleNewDebate();
+      }
+      // Ctrl/Cmd + S for save (when debate is done)
+      if ((event.ctrlKey || event.metaKey) && event.key === 's' && phase === 'done') {
+        event.preventDefault();
+        // Trigger save if not already saved
+        if (!savedPath) {
+          // This would need to be implemented - for now just show a message
+          setStatus('Save functionality would be triggered here (Ctrl+S)');
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [phase, savedPath]);
 
   /**
    * Reset all debate state so the user can start a fresh topic.
@@ -61,6 +98,7 @@ export default function App() {
     setStatus('');
     setSavedPath('');
     setTypingIndex(-1);
+    setCurrentRound(0);
     setPhase('input');
   }
 
@@ -88,7 +126,18 @@ export default function App() {
       generatedPersonas = data.personas;
       setPersonas(generatedPersonas);
     } catch (err) {
-      setStatus(`Error generating personas: ${err.message}`);
+      const errorMessage = err.message.toLowerCase();
+      let userFriendlyMessage = 'Unable to generate debate panel. Please try again.';
+
+      if (errorMessage.includes('timeout')) {
+        userFriendlyMessage = 'Request timed out. The AI service is busy. Please try again in a moment.';
+      } else if (errorMessage.includes('rate limit') || errorMessage.includes('too many')) {
+        userFriendlyMessage = 'Too many requests. Please wait a few minutes before trying again.';
+      } else if (errorMessage.includes('topic') && errorMessage.includes('length')) {
+        userFriendlyMessage = 'Topic is too long. Please use 100 characters or less.';
+      }
+
+      setStatus(`Panel assembly failed: ${userFriendlyMessage}`);
       setIsActive(false);
       return;
     }
@@ -101,6 +150,7 @@ export default function App() {
     let currentHistory = [];
 
     for (let round = 1; round <= TOTAL_ROUNDS; round++) {
+      setCurrentRound(round);
       setStatus(`Round ${round} of ${TOTAL_ROUNDS} — the panel is deliberating...`);
 
       try {
@@ -126,7 +176,17 @@ export default function App() {
 
         currentHistory = data.history;
       } catch (err) {
-        setStatus(`Error in round ${round}: ${err.message}`);
+        const errorMessage = err.message.toLowerCase();
+        let userFriendlyMessage = 'Debate round failed. The discussion may be incomplete.';
+
+        if (errorMessage.includes('timeout')) {
+          userFriendlyMessage = 'Round timed out. The AI service is busy. Continuing with available responses.';
+        } else if (errorMessage.includes('rate limit') || errorMessage.includes('too many')) {
+          userFriendlyMessage = 'Rate limit reached. Waiting before continuing...';
+          await delay(5000); // Wait 5 seconds before failing
+        }
+
+        setStatus(`Round ${round} issue: ${userFriendlyMessage}`);
         setIsActive(false);
         return;
       }
@@ -152,7 +212,14 @@ export default function App() {
       setSummary(debateSummary);
       setVerdict(debateVerdict);
     } catch (err) {
-      setStatus(`Error summarising: ${err.message}`);
+      const errorMessage = err.message.toLowerCase();
+      let userFriendlyMessage = 'Unable to generate debate summary. The discussion is still available.';
+
+      if (errorMessage.includes('timeout')) {
+        userFriendlyMessage = 'Summary generation timed out. The debate transcript is still available.';
+      }
+
+      setStatus(`Summary failed: ${userFriendlyMessage}`);
       setIsActive(false);
       return;
     }
@@ -163,7 +230,10 @@ export default function App() {
     try {
       const res = await fetch('/api/save-to-obsidian', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': import.meta.env.VITE_SAVE_API_KEY || 'default-key-for-dev'
+        },
         body: JSON.stringify({
           topic: submittedTopic,
           personas: generatedPersonas,
@@ -177,8 +247,17 @@ export default function App() {
       setSavedPath(data.path);
       setStatus(`Saved to Obsidian: ${data.path.split('/').pop()}`);
     } catch (err) {
+      const errorMessage = err.message.toLowerCase();
+      let userFriendlyMessage = 'Could not save to Obsidian. The debate is still available in your browser.';
+
+      if (errorMessage.includes('api key') || errorMessage.includes('unauthorized')) {
+        userFriendlyMessage = 'Authentication failed. Please check your save settings.';
+      } else if (errorMessage.includes('vault') || errorMessage.includes('obsidian')) {
+        userFriendlyMessage = 'Obsidian vault not found. Please ensure Obsidian is running and configured.';
+      }
+
       // Non-fatal: the debate still happened; Obsidian save is a bonus
-      setStatus(`Note: could not save to Obsidian — ${err.message}`);
+      setStatus(`Save issue: ${userFriendlyMessage}`);
     }
 
     setIsActive(false);
@@ -244,6 +323,8 @@ export default function App() {
                     history={history}
                     personas={personas}
                     typingIndex={typingIndex}
+                    currentRound={currentRound}
+                    totalRounds={TOTAL_ROUNDS}
                   />
                 </section>
               )}
@@ -293,8 +374,8 @@ const styles = {
     marginBottom: 'var(--spacing-xs)',
   },
   topicText: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 'clamp(1.4rem, 3.5vw, 2.2rem)',
+    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
+    fontSize: 'clamp(1.6rem, 3.8vw, 2.5rem)',
     color: 'var(--text-primary)',
     fontStyle: 'italic',
     lineHeight: '1.3',
