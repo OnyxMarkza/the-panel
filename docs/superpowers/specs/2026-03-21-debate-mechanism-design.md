@@ -56,7 +56,7 @@ The Express server routes (`server/routes/`) and Vercel API functions (`api/`) r
 - System prompt updated to request `background` and `relationships`
 - Token limit increased from 800 to 1200 to accommodate the richer schema at larger panel sizes
 - Validation loop checks all new fields are present and correctly typed
-- Validation loop also verifies relationship symmetry: for every entry `{ name: B, dynamic: X }` in persona A's relationships, persona B must have a corresponding entry for A. If the LLM returns an asymmetric web, the endpoint throws a parse error and retries (or returns a 500)
+- Validation loop also verifies relationship symmetry: for every entry `{ name: B, dynamic: X }` in persona A's relationships, persona B must have a corresponding entry for A. If the LLM returns an asymmetric web, the endpoint retries once. If the second attempt is also asymmetric, it returns a 500 error — no unbounded retry loop
 - Mirrored in both `api/generate-personas.js` and `server/routes/personas.js`
 
 ---
@@ -105,7 +105,7 @@ The backend converts `interventions` into history entries before any persona spe
 
 The `persona: 'Audience → [Name]'` format is both the history entry value and the display convention in DebateThread — the frontend does not need a separate conversion step. For a direct challenge, only the targeted persona receives an additional instruction in their system prompt: *"The audience has directed a question specifically at you — address it."*
 
-**Each history entry gains a `phase` field** (`'opening' | 'rebuttal' | 'closing' | 'audience'`) so DebateThread can render phase-boundary headers without relying on index arithmetic.
+**Each history entry gains a `phase` field** (`'opening' | 'rebuttal' | 'closing' | 'audience'`) so DebateThread can render phase-boundary headers without relying on index arithmetic. Every entry pushed inside the per-persona loop in `debate-round.js` must carry `phase: currentPhase` (e.g. `{ persona, content, phase }`). Audience entries injected from the `interventions` array use `phase: 'audience'`.
 
 Mirrored in both `api/debate-round.js` and `server/routes/debate.js`.
 
@@ -155,7 +155,15 @@ input → personas → debate (3 rounds) → summary → done
 ```
 
 ### State variable migration
-The existing `roundNumber` loop variable and `TOTAL_ROUNDS = 3` constant in `App.jsx` are removed. They are replaced by a `currentPhase` state variable (`'opening' | 'rebuttal' | 'closing' | null`). The status bar message changes from "Round X of 3 — the panel is deliberating..." to e.g. "Opening statements — the panel is speaking...". The `DebateThread` component's `typingIndex` prop is unchanged; its `currentRound`/`totalRounds` props (if any) are replaced by `currentPhase: string`.
+The existing `roundNumber` loop variable and `TOTAL_ROUNDS = 3` constant in `App.jsx` are removed. They are replaced by a new `currentPhase` state variable (`'opening' | 'rebuttal' | 'closing' | null`).
+
+**Important:** `App.jsx` already has a `phase` state variable (tracking the overall UI state machine: `'input' | 'personas' | 'opening' | 'intervention' | 'rebuttal' | 'closing' | 'summary' | 'done'`). The new variable is named `currentPhase` and is entirely separate — it tracks which debate phase is running, while `phase` tracks the broader UI screen state. Do not rename the existing `phase` variable.
+
+The `handleNewDebate` reset function must also reset `currentPhase` to `null` alongside the existing resets.
+
+The `App.jsx` fetch call to `/api/generate-personas` must include `count: panelCount` in the request body. The fetch call to `/api/debate-round` must include `phase: currentPhase` (and `panelCount` is implicit via the personas array length, so it does not need to be sent separately).
+
+The status bar message changes from "Round X of 3 — the panel is deliberating..." to e.g. "Opening statements — the panel is speaking...". The `DebateThread` component's `typingIndex` prop is unchanged; its `currentRound`/`totalRounds` props (if any) are replaced by `currentPhase: string`.
 
 ### Panel size picker
 - Added to `TopicInput` component as a labelled number input or slider (range 3–10, default 5)
