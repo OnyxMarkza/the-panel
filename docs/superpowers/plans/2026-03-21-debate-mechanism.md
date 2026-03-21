@@ -1733,7 +1733,6 @@ Replace the `<DebateThread>` usage (which currently passes `currentRound` and `t
   currentPhase={currentPhase}
 />
 ```
-```
 
 - [ ] **Step 8: Run the full test suite one final time**
 
