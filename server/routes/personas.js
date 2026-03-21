@@ -6,7 +6,7 @@ const router = Router();
 /**
  * POST /api/generate-personas
  * Body: { topic: string }
- * Returns: Array of 5 persona objects { name, archetype, bias, tone }
+ * Returns: Array of 5 persona objects { name, archetype, bias, tone, stance, relationships }
  *
  * We ask Groq to return a raw JSON array so we can parse it directly.
  */
@@ -41,7 +41,11 @@ Each object must have:
 - name: a realistic full name
 - archetype: their professional title and affiliation (e.g. "Health economist, London School of Hygiene & Tropical Medicine")
 - bias: one sentence describing their likely stance on the topic, grounded in their role
-- tone: one word for their debating style (e.g. "direct", "cautious", "dry", "forceful", "analytical")`;
+- tone: one word for their debating style (e.g. "direct", "cautious", "dry", "forceful", "analytical")
+- stance: a 1-2 sentence plain-English summary of what this person will argue (written as "Argues that..." or "Will push for...")
+- relationships: an array of exactly 4 objects, one for each OTHER panellist, each with:
+    - name: the other panellist's name
+    - dynamic: one short sentence describing how these two are likely to interact (e.g. "Will challenge her cost-cutting assumptions" or "Likely allies on the need for regulation")`;
 
   const userPrompt = `Generate 5 debate personas for this topic: "${topic}"`;
 
@@ -49,7 +53,7 @@ Each object must have:
     const raw = await callGroq([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
-    ], 800);
+    ], 2000);
 
     // Extract JSON array from the response (handles cases where model wraps in backticks)
     const jsonMatch = raw.match(/\[[\s\S]*\]/);

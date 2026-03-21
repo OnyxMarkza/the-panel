@@ -6,6 +6,7 @@ import TopicInput from './components/TopicInput.jsx';
 import PersonaCard from './components/PersonaCard.jsx';
 import DebateThread from './components/DebateThread.jsx';
 import SummaryPanel from './components/SummaryPanel.jsx';
+import PanelBriefing from './components/PanelBriefing.jsx';
 import StatusBar from './components/StatusBar.jsx';
 
 /**
@@ -313,6 +314,13 @@ export default function App() {
                       <PersonaCard key={p.name} persona={p} index={i} />
                     ))}
                   </div>
+                </section>
+              )}
+
+              {/* Panel briefing — stance summaries and relationships */}
+              {personas.length > 0 && (
+                <section>
+                  <PanelBriefing personas={personas} />
                 </section>
               )}
 
