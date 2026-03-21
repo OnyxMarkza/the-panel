@@ -54,7 +54,9 @@ The Express server routes (`server/routes/`) and Vercel API functions (`api/`) r
 - New input field: `count` (integer, 3–10, defaults to 5)
 - The hardcoded `5` in the prompt and validation is replaced with `count`
 - System prompt updated to request `background` and `relationships`
+- Token limit increased from 800 to 1200 to accommodate the richer schema at larger panel sizes
 - Validation loop checks all new fields are present and correctly typed
+- Validation loop also verifies relationship symmetry: for every entry `{ name: B, dynamic: X }` in persona A's relationships, persona B must have a corresponding entry for A. If the LLM returns an asymmetric web, the endpoint throws a parse error and retries (or returns a 500)
 - Mirrored in both `api/generate-personas.js` and `server/routes/personas.js`
 
 ---
@@ -96,7 +98,14 @@ New input parameters:
 }
 ```
 
-Interventions are prepended to the running history as `Audience` entries before any persona speaks. For a direct challenge targeting one specific person, only that persona receives an additional instruction in their system prompt: *"The audience has directed a question specifically at you — address it."*
+**Intervention history injection (backend responsibility):**
+The backend converts `interventions` into history entries before any persona speaks:
+- `type: 'question'` → `{ persona: 'Audience', content, phase: currentPhase }`
+- `type: 'challenge'` → `{ persona: 'Audience → [targetPersona]', content, phase: currentPhase }`
+
+The `persona: 'Audience → [Name]'` format is both the history entry value and the display convention in DebateThread — the frontend does not need a separate conversion step. For a direct challenge, only the targeted persona receives an additional instruction in their system prompt: *"The audience has directed a question specifically at you — address it."*
+
+**Each history entry gains a `phase` field** (`'opening' | 'rebuttal' | 'closing' | 'audience'`) so DebateThread can render phase-boundary headers without relying on index arithmetic.
 
 Mirrored in both `api/debate-round.js` and `server/routes/debate.js`.
 
@@ -110,21 +119,26 @@ Appears between each phase as a slide-in panel. Contains two tabs:
 
 **Audience Question tab**
 - Free-text input
-- Question is injected as `{ persona: 'Audience', content: question }`
+- Question is injected as `{ persona: 'Audience', content: question, phase: 'audience' }`
 - Addressed by all panellists in the next phase
 
 **Direct Challenge tab**
 - Free-text input + dropdown of panellist names
-- Injected as `{ persona: 'Audience → [Name]', content: challenge }`
+- Injected as `{ persona: 'Audience → [Name]', content: challenge, phase: 'audience' }`
 - Only the targeted panellist receives an explicit instruction to respond
 
+**Mutual exclusivity:** Only one intervention can be submitted per pause. The two tabs are mutually exclusive — switching tabs clears the other tab's input. A single Submit button sends whichever tab is currently active. This avoids ambiguity about ordering and targeting when both are filled.
+
 **Skip button**
-- Skips the intervention entirely; next phase starts immediately
+- Skips the intervention entirely; next phase starts immediately with an empty `interventions` array
 
 ### Visual treatment
 - Styled consistently: dark background, gold accents, JetBrains Mono inputs
 - Shows the phase just completed and the phase about to begin
-- Audience entries in `DebateThread` are rendered distinctly — labelled "Audience" in a muted style, visually separate from panellist speech
+- Audience entries in `DebateThread` are rendered distinctly — labelled "Audience" (or "Audience → [Name]") in a muted style, visually separate from panellist speech
+
+### Error handling
+If the API call for the next phase fails after an intervention has been submitted, the error is displayed via the existing `StatusBar` pattern (`setStatus(error)`, `setIsActive(false)`). The intervention data is discarded along with the failed round — it is not re-queued. The state machine does not automatically retry. The user must start a new debate.
 
 ---
 
@@ -140,6 +154,9 @@ Replaces the current:
 input → personas → debate (3 rounds) → summary → done
 ```
 
+### State variable migration
+The existing `roundNumber` loop variable and `TOTAL_ROUNDS = 3` constant in `App.jsx` are removed. They are replaced by a `currentPhase` state variable (`'opening' | 'rebuttal' | 'closing' | null`). The status bar message changes from "Round X of 3 — the panel is deliberating..." to e.g. "Opening statements — the panel is speaking...". The `DebateThread` component's `typingIndex` prop is unchanged; its `currentRound`/`totalRounds` props (if any) are replaced by `currentPhase: string`.
+
 ### Panel size picker
 - Added to `TopicInput` component as a labelled number input or slider (range 3–10, default 5)
 - `panelCount` flows as a prop through `App.jsx` into the persona generation and debate calls
@@ -153,6 +170,12 @@ Add `--persona-5` through `--persona-9` to support panels larger than 5.
 
 ### `PERSONA_COLOURS` array (`DebateThread.jsx`)
 Expand from 5 to 10 entries mapping to the new CSS variables.
+
+### `DebateThread` prop signature changes
+- Remove `currentRound` / `totalRounds` props (no longer meaningful)
+- Add `currentPhase: 'opening' | 'rebuttal' | 'closing' | null`
+- Phase-boundary headers ("Opening Statements", "Rebuttal Round", "Closing Arguments") are derived from the `phase` field on each history entry — rendered as a divider when `entry.phase` differs from the previous entry's `phase`
+- `Audience` entries (where `entry.persona` starts with `'Audience'`) are rendered in a distinct muted style
 
 ### `PersonaCard` component
 Add a `background` field rendered beneath the `archetype` line.
@@ -173,6 +196,10 @@ Add a `background` field rendered beneath the `archetype` line.
 | `client/src/components/DebateThread.jsx` | Expand colour array, distinct Audience entry styling, phase headers |
 | `client/src/index.css` | Add `--persona-5` through `--persona-9` |
 | `client/src/components/InterventionPanel.jsx` | New component — audience question + direct challenge UI |
+| `api/summarise.js` | Filter out `Audience` history entries when building the moderator transcript (or prefix them clearly), so they do not disrupt the summary format |
+| `server/routes/summarise.js` | Same as above |
+
+Note: `server/routes/debates.js` is a read-only Supabase fetch route and does **not** need changes.
 
 ---
 
