@@ -118,8 +118,8 @@ const styles = {
     animation: 'fadeIn 0.4s var(--ease-out)',
   },
   heading: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
-    fontStyle: 'italic',
+    fontFamily: "'Inter', sans-serif",
+
     fontSize: '1.15rem',
     color: 'var(--gold)',
     borderBottom: '1px solid var(--border)',
@@ -167,7 +167,7 @@ const styles = {
     flexWrap: 'wrap',
   },
   name: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
+    fontFamily: "'Inter', sans-serif",
     fontWeight: '700',
     fontSize: '1.05rem',
     lineHeight: '1.2',
@@ -179,8 +179,8 @@ const styles = {
     letterSpacing: '0.02em',
   },
   stance: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
-    fontStyle: 'italic',
+    fontFamily: "'Inter', sans-serif",
+
     fontSize: '0.92rem',
     lineHeight: '1.5',
     color: 'var(--text-primary)',
@@ -218,7 +218,7 @@ const styles = {
     alignItems: 'baseline',
   },
   relName: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
+    fontFamily: "'Inter', sans-serif",
     fontWeight: '700',
     fontSize: '0.88rem',
     flexShrink: 0,
