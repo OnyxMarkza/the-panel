@@ -382,14 +382,14 @@ const styles = {
     marginBottom: 'var(--spacing-xs)',
   },
   topicText: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
+    fontFamily: "'Inter', sans-serif",
     fontSize: 'clamp(1.6rem, 3.8vw, 2.5rem)',
     color: 'var(--text-primary)',
-    fontStyle: 'italic',
+
     lineHeight: '1.3',
   },
   sectionHeading: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Inter', sans-serif",
     fontSize: '0.85rem',
     color: 'var(--gold)',
     marginBottom: 'var(--spacing-md)',

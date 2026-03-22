@@ -152,8 +152,8 @@ const styles = {
     animation: 'fadeIn 0.4s var(--ease-out)',
   },
   heading: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
-    fontStyle: 'italic',
+    fontFamily: "'Inter', sans-serif",
+
     fontSize: '1.15rem',
     color: 'var(--gold)',
     borderBottom: '1px solid var(--border)',
@@ -178,7 +178,7 @@ const styles = {
     flexWrap: 'wrap',
   },
   speaker: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
+    fontFamily: "'Inter', sans-serif",
     fontWeight: '700',
     fontSize: '1rem',
     letterSpacing: '0.02em',

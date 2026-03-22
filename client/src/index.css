@@ -1,26 +1,26 @@
 /* ============================================================
    The Panel — Global Styles
-   Dark editorial aesthetic: charcoal, gold, serif/mono fonts
+   Modern dark aesthetic: true black, bright accents, sans-serif
    ============================================================ */
 
 :root {
   /* --- Colour palette --- */
-  --bg-primary: #1a1a1a;
-  --bg-secondary: #222222;
-  --bg-card: #252525;
-  --gold: #d4a853;
-  --gold-dim: #a07e3a;
-  --gold-glow: rgba(212, 168, 83, 0.15);
-  --text-primary: #e8e0d0;
-  --text-muted: #888880;
-  --border: #333330;
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-card: #161616;
+  --gold: #e2b340;
+  --gold-dim: #c49a2e;
+  --gold-glow: rgba(226, 179, 64, 0.15);
+  --text-primary: #f0f0f0;
+  --text-muted: #777777;
+  --border: #2a2a2a;
 
-  /* Persona accent colours — one per panellist */
-  --persona-0: #d4a853; /* gold */
-  --persona-1: #7eb8b8; /* teal */
-  --persona-2: #c47a7a; /* dusty rose */
-  --persona-3: #8fa8d4; /* slate blue */
-  --persona-4: #a8c47a; /* sage */
+  /* Persona accent colours — brighter to pop against black */
+  --persona-0: #e2b340; /* amber */
+  --persona-1: #4ecdc4; /* teal */
+  --persona-2: #ff6b6b; /* coral */
+  --persona-3: #74b9ff; /* sky */
+  --persona-4: #a8e06c; /* lime */
 
   /* --- Spacing scale (8px base) --- */
   --spacing-xs:  0.5rem;   /*  8px */
@@ -37,20 +37,21 @@
   --header-height:      56px;
 
   /* --- Shadows --- */
-  --shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-md:   0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg:   0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-gold: 0 0 0 2px rgba(212, 168, 83, 0.25), 0 4px 12px rgba(212, 168, 83, 0.1);
+  --shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.6);
+  --shadow-md:   0 4px 12px rgba(0, 0, 0, 0.6);
+  --shadow-lg:   0 8px 24px rgba(0, 0, 0, 0.7);
+  --shadow-gold: 0 0 0 2px rgba(226, 179, 64, 0.25), 0 4px 12px rgba(226, 179, 64, 0.1);
 
   /* --- Gradients --- */
-  --gradient-card:    linear-gradient(135deg, var(--bg-card) 0%, rgba(212, 168, 83, 0.03) 100%);
+  --gradient-card:    linear-gradient(135deg, var(--bg-card) 0%, rgba(226, 179, 64, 0.02) 100%);
   --gradient-overlay: linear-gradient(to bottom, transparent, var(--bg-primary));
 
   /* --- Easing --- */
   --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* --- Display font (Cormorant Garamond — used for large headings & body text) --- */
-  --font-display: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+  /* --- Fonts --- */
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
 /* ============================================================
@@ -70,7 +71,7 @@ html, body, #root {
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-display);
   font-size: 1rem;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -94,10 +95,10 @@ body::after {
 }
 
 /* --- Type scale --- */
-h1 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 2.5rem; line-height: 1.2; letter-spacing: 0.02em; }
-h2 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 2rem;   line-height: 1.2; letter-spacing: 0.02em; }
-h3 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.5rem; line-height: 1.2; letter-spacing: 0.02em; }
-h4 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25rem; line-height: 1.2; letter-spacing: 0.02em; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 2.5rem; line-height: 1.2; letter-spacing: -0.02em; }
+h2 { font-family: var(--font-display); font-weight: 700; font-size: 2rem;   line-height: 1.2; letter-spacing: -0.02em; }
+h3 { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; line-height: 1.2; letter-spacing: -0.01em; }
+h4 { font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; line-height: 1.2; letter-spacing: -0.01em; }
 
 /* ============================================================
    Scrollbar
@@ -214,7 +215,7 @@ h4 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25re
 }
 
 .header__logo {
-  font-family: 'Playfair Display', serif;
+  font-family: var(--font-display);
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--gold);
@@ -239,7 +240,7 @@ h4 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25re
   color: var(--text-muted);
   cursor: pointer;
   padding: 0.4rem 0.65rem;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -249,7 +250,7 @@ h4 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25re
 .header__btn:hover {
   color: var(--text-primary);
   border-color: var(--gold-dim);
-  background: rgba(212, 168, 83, 0.06);
+  background: rgba(226, 179, 64, 0.06);
 }
 
 .header__btn--primary {
@@ -323,7 +324,7 @@ h4 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25re
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   padding: 0.4rem 0.65rem;
   outline: none;
@@ -335,7 +336,7 @@ h4 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25re
 
 .sidebar__label {
   padding: var(--spacing-sm) var(--spacing-md) var(--spacing-xs);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -363,13 +364,13 @@ h4 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25re
 .sidebar__item:hover { background: rgba(255, 255, 255, 0.04); }
 
 .sidebar__item.active {
-  background: rgba(212, 168, 83, 0.08);
+  background: rgba(226, 179, 64, 0.08);
   border-left: 2px solid var(--gold);
   padding-left: calc(var(--spacing-sm) - 2px);
 }
 
 .sidebar__item-topic {
-  font-family: 'Playfair Display', serif;
+  font-family: var(--font-display);
   font-size: 0.85rem;
   color: var(--text-primary);
   line-height: 1.35;
@@ -381,7 +382,7 @@ h4 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25re
 .sidebar__item.active .sidebar__item-topic { color: var(--gold); }
 
 .sidebar__item-date {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--text-muted);
   letter-spacing: 0.04em;
@@ -389,7 +390,7 @@ h4 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25re
 
 .sidebar__empty {
   padding: var(--spacing-lg) var(--spacing-md);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--text-muted);
   text-align: center;
@@ -410,14 +411,14 @@ h4 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.25re
 }
 
 .footer__copy {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.7rem;
   color: var(--text-muted);
   letter-spacing: 0.06em;
 }
 
 .footer__powered {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.7rem;
   color: var(--text-muted);
   letter-spacing: 0.06em;

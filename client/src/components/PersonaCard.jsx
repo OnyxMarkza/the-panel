@@ -88,11 +88,11 @@ export default function PersonaCard({ persona, index }) {
 
 // RGB values matching the --persona-N CSS variables, used for rgba() tints
 const ACCENT_RGB = [
-  '212,168,83',   // gold    (--persona-0)
-  '126,184,184',  // teal    (--persona-1)
-  '196,122,122',  // rose    (--persona-2)
-  '143,168,212',  // blue    (--persona-3)
-  '168,196,122',  // sage    (--persona-4)
+  '226,179,64',   // amber   (--persona-0)
+  '78,205,196',   // teal    (--persona-1)
+  '255,107,107',  // coral   (--persona-2)
+  '116,185,255',  // sky     (--persona-3)
+  '168,224,108',  // lime    (--persona-4)
 ];
 
 const styles = {
@@ -132,7 +132,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
+    fontFamily: "'Inter', sans-serif",
     fontWeight: '700',
     fontSize: '0.88rem',
     flexShrink: 0,
@@ -145,7 +145,7 @@ const styles = {
     minWidth: 0,
   },
   name: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
+    fontFamily: "'Inter', sans-serif",
     fontWeight: '700',
     fontSize: '1.05rem',
     lineHeight: '1.1',
@@ -167,8 +167,8 @@ const styles = {
     opacity: 0.18,
   },
   bias: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
-    fontStyle: 'italic',
+    fontFamily: "'Inter', sans-serif",
+
     fontSize: '0.92rem',
     lineHeight: '1.55',
     color: 'var(--text-primary)',

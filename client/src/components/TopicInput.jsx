@@ -3,8 +3,8 @@ import React, { useState } from 'react';
 /**
  * TopicInput — The opening screen within the main content area.
  *
- * Aesthetic: classified debate chamber. An SVG crest, large italic
- * Cormorant Garamond logotype, decorative ornament, italic serif input,
+ * Aesthetic: modern debate chamber. An SVG crest, large Inter
+ * logotype, decorative ornament, clean sans-serif input,
  * and an uppercase mono CTA.
  *
  * On submit, calls the parent's onSubmit handler with the topic string.
@@ -61,7 +61,7 @@ export default function TopicInput({ onSubmit, isLoading }) {
             ...styles.inputWrapper,
             borderColor: focused ? 'var(--gold)' : 'var(--border)',
             boxShadow: focused
-              ? '0 0 0 1px var(--gold), 0 4px 24px rgba(212, 168, 83, 0.12)'
+              ? '0 0 0 1px var(--gold), 0 4px 24px rgba(226, 179, 64, 0.12)'
               : 'none',
           }}
         >
@@ -99,8 +99,8 @@ export default function TopicInput({ onSubmit, isLoading }) {
             cursor:    isDisabled ? 'not-allowed' : 'pointer',
             transform: hovered && !isDisabled ? 'translateY(-2px)' : 'translateY(0)',
             boxShadow: hovered && !isDisabled
-              ? '0 6px 24px rgba(212, 168, 83, 0.35)'
-              : '0 2px 10px rgba(212, 168, 83, 0.12)',
+              ? '0 6px 24px rgba(226, 179, 64, 0.35)'
+              : '0 2px 10px rgba(226, 179, 64, 0.12)',
           }}
         >
           {isLoading ? 'Convening the panel...' : 'Convene the Panel \u2192'}
@@ -143,7 +143,7 @@ function CrestSVG() {
         x="36"
         y="45"
         textAnchor="middle"
-        fontFamily="'Cormorant Garamond', 'Playfair Display', serif"
+        fontFamily="'Inter', sans-serif"
         fontWeight="700"
         fontSize="22"
         fill="var(--gold)"
@@ -184,9 +184,8 @@ const styles = {
     opacity: 0.7,
   },
   title: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
-    fontWeight: '600',
-    fontStyle: 'italic',
+    fontFamily: "'Inter', sans-serif",
+    fontWeight: '700',
     fontSize: 'clamp(3.5rem, 8vw, 6.5rem)',
     color: 'var(--gold)',
     letterSpacing: '-0.02em',
@@ -239,8 +238,8 @@ const styles = {
     border: 'none',
     outline: 'none',
     color: 'var(--text-primary)',
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
-    fontStyle: 'italic',
+    fontFamily: "'Inter', sans-serif",
+
     fontSize: '1.15rem',
     lineHeight: '1.5',
     paddingRight: '64px',

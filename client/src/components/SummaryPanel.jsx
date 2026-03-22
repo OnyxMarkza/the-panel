@@ -4,7 +4,7 @@ import React from 'react';
  * SummaryPanel — Displays the moderator's synthesis and verdict.
  * Slides in after all debate rounds are complete.
  *
- * Summary box: subtle card background, italic Cormorant Garamond text.
+ * Summary box: subtle card background, clean Inter sans-serif text.
  * Verdict box: gold-tinted, with a decorative heading row and larger type.
  */
 export default function SummaryPanel({ summary, verdict }) {
@@ -60,8 +60,8 @@ const styles = {
     opacity: 0.25,
   },
   label: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
-    fontStyle: 'italic',
+    fontFamily: "'Inter', sans-serif",
+
     color: 'var(--gold)',
     fontSize: '1rem',
     whiteSpace: 'nowrap',
@@ -76,11 +76,11 @@ const styles = {
     boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
   },
   verdictBox: {
-    background: 'linear-gradient(135deg, var(--bg-card) 0%, rgba(212, 168, 83, 0.07) 100%)',
-    border: '1px solid rgba(212, 168, 83, 0.38)',
+    background: 'linear-gradient(135deg, var(--bg-card) 0%, rgba(226, 179, 64, 0.07) 100%)',
+    border: '1px solid rgba(226, 179, 64, 0.38)',
     borderRadius: '6px',
     padding: 'var(--spacing-lg)',
-    boxShadow: '0 4px 20px rgba(212, 168, 83, 0.08)',
+    boxShadow: '0 4px 20px rgba(226, 179, 64, 0.08)',
   },
   sectionHeading: {
     fontFamily: "'JetBrains Mono', monospace",
@@ -109,15 +109,15 @@ const styles = {
     letterSpacing: '0.14em',
   },
   text: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
-    fontStyle: 'italic',
+    fontFamily: "'Inter', sans-serif",
+
     fontSize: '1.05rem',
     lineHeight: '1.72',
     color: 'var(--text-primary)',
   },
   verdictText: {
-    fontFamily: "'Cormorant Garamond', 'Playfair Display', serif",
-    fontStyle: 'italic',
+    fontFamily: "'Inter', sans-serif",
+
     fontSize: '1.12rem',
     lineHeight: '1.65',
     color: 'var(--gold)',
