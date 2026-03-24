@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PERSONA_COLOURS } from '../utils/personaColors.js';
 
 /**
  * PanelBriefing — A "dossier" summary shown before the debate begins.
@@ -10,14 +11,6 @@ import React, { useState } from 'react';
  *
  * This helps the reader follow who is likely to agree, clash, or surprise.
  */
-
-const PERSONA_COLOURS = [
-  'var(--persona-0)',
-  'var(--persona-1)',
-  'var(--persona-2)',
-  'var(--persona-3)',
-  'var(--persona-4)',
-];
 
 export default function PanelBriefing({ personas }) {
   const [expandedIndex, setExpandedIndex] = useState(null);
