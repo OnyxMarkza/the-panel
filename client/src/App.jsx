@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Route, Routes } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import Footer from './components/Footer.jsx';
@@ -8,47 +9,34 @@ import DebateThread from './components/DebateThread.jsx';
 import SummaryPanel from './components/SummaryPanel.jsx';
 import PanelBriefing from './components/PanelBriefing.jsx';
 import StatusBar from './components/StatusBar.jsx';
-
-/**
- * App — Root component and orchestrator.
- *
- * Layout (always rendered):
- *   <Header>   — fixed 56px bar
- *   <Sidebar>  — collapsible history panel
- *   <main>     — scrollable content area
- *   <Footer>
- *
- * Content flow inside <main>:
- *   1. TopicInput    — user enters a debate topic
- *   2. PersonaCards  — panellists are generated and revealed
- *   3. DebateThread  — rounds stream in with typewriter effect
- *   4. SummaryPanel  — moderator synthesis and verdict
- */
+import SharedDebateView from './components/SharedDebateView.jsx';
 
 const TOTAL_ROUNDS = 3;
 
-export default function App() {
+function DebateHome() {
   // --- Core debate state ---
+  const [topic, setTopic] = useState('');
   const [topic, setTopic]     = useState('');
   const [personaCount, setPersonaCount] = useState(5);
   const [personas, setPersonas] = useState([]);
-  const [history, setHistory]   = useState([]);
-  const [summary, setSummary]   = useState('');
-  const [verdict, setVerdict]   = useState('');
+  const [history, setHistory] = useState([]);
+  const [summary, setSummary] = useState('');
+  const [verdict, setVerdict] = useState('');
 
   // --- UI state ---
-  const [status, setStatus]         = useState('');
-  const [isActive, setIsActive]     = useState(false);
-  const [phase, setPhase]           = useState('input'); // 'input' | 'personas' | 'debate' | 'summary' | 'done'
+  const [status, setStatus] = useState('');
+  const [isActive, setIsActive] = useState(false);
+  const [phase, setPhase] = useState('input'); // 'input' | 'personas' | 'debate' | 'summary' | 'done'
   const [typingIndex, setTypingIndex] = useState(-1);
-  const [savedPath, setSavedPath]   = useState('');
+  const [savedPath, setSavedPath] = useState('');
+  const [debateId, setDebateId] = useState('');
   const [currentRound, setCurrentRound] = useState(0);
 
   // --- Layout state ---
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // --- Debate history (current session only, shown in sidebar) ---
-  const [debates, setDebates]               = useState([]);
+  const [debates, setDebates] = useState([]);
   const [currentDebateId, setCurrentDebateId] = useState(null);
   const [shareUrl, setShareUrl] = useState('');
 
@@ -85,9 +73,7 @@ export default function App() {
       // Ctrl/Cmd + S for save (when debate is done)
       if ((event.ctrlKey || event.metaKey) && event.key === 's' && phase === 'done') {
         event.preventDefault();
-        // Trigger save if not already saved
-        if (!savedPath) {
-          // This would need to be implemented - for now just show a message
+        if (!savedPath && !debateId) {
           setStatus('Save functionality would be triggered here (Ctrl+S)');
         }
       }
@@ -95,12 +81,8 @@ export default function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [phase, savedPath]);
+  }, [phase, savedPath, debateId]);
 
-  /**
-   * Reset all debate state so the user can start a fresh topic.
-   * Called by the Header's "New Debate" button.
-   */
   function handleNewDebate() {
     setTopic('');
     setPersonaCount(5);
@@ -110,6 +92,7 @@ export default function App() {
     setVerdict('');
     setStatus('');
     setSavedPath('');
+    setDebateId('');
     setTypingIndex(-1);
     setCurrentRound(0);
     setPhase('input');
@@ -131,7 +114,6 @@ export default function App() {
     setTopic(submittedTopic);
     setPhase('personas');
 
-    // -- Step 1: Generate personas --
     setStatus('Assembling the panel...');
     setIsActive(true);
 
@@ -163,10 +145,8 @@ export default function App() {
       return;
     }
 
-    // Brief pause so the user can read the personas before the debate begins
     await delay(1200);
 
-    // -- Step 2: Run 3 debate rounds --
     setPhase('debate');
     let currentHistory = [];
 
@@ -188,7 +168,6 @@ export default function App() {
         const data = await res.json();
         if (data.error) throw new Error(data.message);
 
-        // Reveal messages one at a time with enough pause for the typewriter to run
         for (let i = currentHistory.length; i < data.history.length; i++) {
           setTypingIndex(i);
           setHistory([...data.history.slice(0, i + 1)]);
@@ -204,7 +183,7 @@ export default function App() {
           userFriendlyMessage = 'Round timed out. The AI service is busy. Continuing with available responses.';
         } else if (errorMessage.includes('rate limit') || errorMessage.includes('too many')) {
           userFriendlyMessage = 'Rate limit reached. Waiting before continuing...';
-          await delay(5000); // Wait 5 seconds before failing
+          await delay(5000);
         }
 
         setStatus(`Round ${round} issue: ${userFriendlyMessage}`);
@@ -215,11 +194,11 @@ export default function App() {
 
     setTypingIndex(-1);
 
-    // -- Step 3: Summarise --
     setStatus('Moderator is synthesising the debate...');
     setPhase('summary');
 
-    let debateSummary, debateVerdict;
+    let debateSummary;
+    let debateVerdict;
     try {
       const res = await fetch('/api/summarise', {
         method: 'POST',
@@ -245,6 +224,7 @@ export default function App() {
       return;
     }
 
+    setStatus('Saving debate to database...');
     // -- Step 4: Save to configured storage backend --
     setStatus('Saving debate transcript...');
 
@@ -265,6 +245,17 @@ export default function App() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.message);
+      setSavedPath(data.path ?? '');
+      setDebateId(data.debateId ?? '');
+      setStatus(data.debateId
+        ? 'Debate saved. You can now share it via link.'
+        : 'Debate saved successfully.');
+    } catch (err) {
+      const errorMessage = err.message.toLowerCase();
+      let userFriendlyMessage = 'Could not save debate. The debate is still available in your browser.';
+
+      if (errorMessage.includes('api key') || errorMessage.includes('unauthorized')) {
+        userFriendlyMessage = 'Authentication failed. Please check your save settings.';
       const returnedDebateId = data.id || null;
       const returnedPath = data.path || '';
       savedDebateId = returnedDebateId;
@@ -294,13 +285,13 @@ export default function App() {
         userFriendlyMessage = 'Local vault save failed. Please check your local save settings.';
       }
 
-      // Non-fatal: the debate still happened; Obsidian save is a bonus
       setStatus(`Save issue: ${userFriendlyMessage}`);
     }
 
     setIsActive(false);
     setPhase('done');
 
+    const newDebate = { id: Date.now(), topic: submittedTopic, date: new Date() };
     // Register this debate in the sidebar history
     const newDebate = { id: savedDebateId || Date.now(), topic: submittedTopic, date: new Date() };
     setDebates(prev => [...prev, newDebate]);
@@ -325,7 +316,7 @@ export default function App() {
       <Header
         onNewDebate={handleNewDebate}
         onToggleSidebar={() => setSidebarOpen(open => !open)}
-        onOpenSettings={() => {/* settings panel — future feature */}}
+        onOpenSettings={() => {}}
       />
 
       <div className="main-layout">
@@ -339,21 +330,16 @@ export default function App() {
 
         <main className="main-content">
           {phase === 'input' ? (
-            /* Landing screen — TopicInput centred in the available space */
             <TopicInput onSubmit={handleTopicSubmit} isLoading={false} />
           ) : (
-            /* Debate in progress or complete */
             <div className="debate-content">
-              {/* Sticky status strip */}
               <StatusBar status={status} isActive={isActive} />
 
-              {/* Topic heading */}
               <header style={styles.topicHeader}>
                 <div style={styles.topicLabel}>The Panel is debating</div>
                 <h2 style={styles.topicText}>{topic}</h2>
               </header>
 
-              {/* Panellists grid */}
               {personas.length > 0 && (
                 <section>
                   <h3 style={styles.sectionHeading}>
@@ -367,14 +353,12 @@ export default function App() {
                 </section>
               )}
 
-              {/* Panel briefing — stance summaries and relationships */}
               {personas.length > 0 && (
                 <section>
                   <PanelBriefing personas={personas} />
                 </section>
               )}
 
-              {/* Debate transcript */}
               {history.length > 0 && (
                 <section>
                   <DebateThread
@@ -387,15 +371,13 @@ export default function App() {
                 </section>
               )}
 
-              {/* Summary and verdict */}
               {summary && (
                 <section>
-                  <SummaryPanel summary={summary} verdict={verdict} />
+                  <SummaryPanel summary={summary} verdict={verdict} debateId={debateId} />
                 </section>
               )}
 
-              {/* Completion note */}
-              {phase === 'done' && savedPath && (
+              {phase === 'done' && (savedPath || debateId) && (
                 <div style={styles.completionNote}>
                   Debate archived &middot; {new Date().toLocaleDateString('en-GB', {
                     day: 'numeric', month: 'long', year: 'numeric',
@@ -424,7 +406,15 @@ export default function App() {
   );
 }
 
-/** Simple promise-based delay helper */
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<DebateHome />} />
+      <Route path="/debate/:id" element={<SharedDebateView />} />
+    </Routes>
+  );
+}
+
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -447,7 +437,6 @@ const styles = {
     fontFamily: "'Inter', sans-serif",
     fontSize: 'clamp(1.6rem, 3.8vw, 2.5rem)',
     color: 'var(--text-primary)',
-
     lineHeight: '1.3',
   },
   sectionHeading: {
