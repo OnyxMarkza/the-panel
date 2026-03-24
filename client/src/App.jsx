@@ -29,7 +29,6 @@ function DebateHome() {
   const [phase, setPhase] = useState('input'); // 'input' | 'personas' | 'debate' | 'summary' | 'done'
   const [typingIndex, setTypingIndex] = useState(-1);
   const [savedPath, setSavedPath] = useState('');
-  const [debateId, setDebateId] = useState('');
   const [currentRound, setCurrentRound] = useState(0);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -66,17 +65,6 @@ function DebateHome() {
     mountedRef.current = false;
   }, []);
 
-  // Route-level flow: support "/debate/:id" loaded directly.
-  useEffect(() => {
-    const path = window.location.pathname;
-    const debatePathMatch = path.match(/^\/debate\/(.+)$/);
-    if (debatePathMatch) {
-      const routedDebateId = debatePathMatch[1];
-      setCurrentDebateId(routedDebateId);
-      loadDebateById(routedDebateId);
-    }
-  }, []);
-
   // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(event) {
@@ -87,7 +75,7 @@ function DebateHome() {
 
       if ((event.ctrlKey || event.metaKey) && event.key === 's' && phase === 'done') {
         event.preventDefault();
-        if (!savedPath && !debateId) {
+        if (!savedPath) {
           setStatus('Save functionality would be triggered here (Ctrl+S)');
         }
       }
@@ -95,7 +83,7 @@ function DebateHome() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [phase, savedPath, debateId]);
+  }, [phase, savedPath]);
 
   const safeSet = useCallback((setter, value, requestId) => {
     if (!mountedRef.current) return;
@@ -114,7 +102,6 @@ function DebateHome() {
     setVerdict('');
     setStatus('');
     setSavedPath('');
-    setDebateId('');
     setTypingIndex(-1);
     setCurrentRound(0);
     setPhase('input');
@@ -469,11 +456,11 @@ function DebateHome() {
 
               {summary && (
                 <section>
-                  <SummaryPanel summary={summary} verdict={verdict} debateId={debateId} />
+                  <SummaryPanel summary={summary} verdict={verdict} debateId={currentDebateId} />
                 </section>
               )}
 
-              {phase === 'done' && (savedPath || debateId) && (
+              {phase === 'done' && (savedPath || currentDebateId) && (
                 <div style={styles.completionNote}>
                   Debate archived &middot; {new Date().toLocaleDateString('en-GB', {
                     day: 'numeric', month: 'long', year: 'numeric',
