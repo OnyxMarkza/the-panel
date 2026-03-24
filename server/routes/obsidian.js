@@ -3,71 +3,67 @@ import { writeDebate } from '../lib/vaultWriter.js';
 import { saveDebateToSupabase } from '../lib/supabase.js';
 
 const router = Router();
+const DEFAULT_PERSONA_COUNT = 5;
 
-/**
- * POST /api/save-to-obsidian
- * Body: { topic, personas, history, summary, verdict }
- * Returns: { success: true, path: string, debateId: string|null }
- *
- * Writes the debate to the Obsidian vault, then ALSO saves it to Supabase.
- * Supabase is wrapped in its own try/catch so a DB failure never blocks the
- * Obsidian save -- the vault write is the source of truth for now.
- *
- * History format (from /api/debate-round):
- *   [{ persona: string, content: string }, ...]
- * Messages are stored flat; round_number is derived from index and persona count.
- */
+function normalizeCount(input) {
+  const parsed = Number.parseInt(input, 10);
+  if (!Number.isInteger(parsed)) return DEFAULT_PERSONA_COUNT;
+  return Math.min(Math.max(parsed, 3), 7);
+}
+
 router.post('/save-to-obsidian', async (req, res) => {
-  // Simple API key authentication
   const apiKey = req.headers['x-api-key'] || req.query.apiKey;
   const expectedKey = process.env.SAVE_API_KEY;
 
   if (expectedKey && apiKey !== expectedKey) {
     return res.status(401).json({
       error: true,
+      code: 'AUTH_ERROR',
       message: 'Invalid or missing API key.',
     });
   }
 
-  const { topic, personas, history, summary, verdict } = req.body;
+  const topic = typeof req.body?.topic === 'string' ? req.body.topic.trim() : '';
+  const personas = Array.isArray(req.body?.personas) ? req.body.personas : [];
+  const history = Array.isArray(req.body?.history) ? req.body.history : [];
+  const summary = typeof req.body?.summary === 'string' ? req.body.summary.trim() : '';
+  const verdict = typeof req.body?.verdict === 'string' ? req.body.verdict.trim() : '';
+  const personaCount = normalizeCount(req.body?.persona_count ?? personas.length);
 
-  if (!topic || !personas || !history || !summary) {
+  if (!topic || personas.length === 0 || history.length === 0 || !summary) {
     return res.status(400).json({
       error: true,
+      code: 'VALIDATION_ERROR',
       message: 'topic, personas, history, and summary are all required.',
     });
   }
 
-  // -------------------------------------------------------------------------
-  // Step 1: Write to Obsidian vault (synchronous, same as before)
-  // -------------------------------------------------------------------------
   let filePath;
   try {
     filePath = writeDebate({ topic, personas, history, summary, verdict });
   } catch (err) {
     console.error('[obsidian] Vault write error:', err.message);
-    return res.status(500).json({ error: true, message: err.message });
+    return res.status(500).json({ error: true, code: 'VAULT_WRITE_ERROR', message: err.message });
   }
 
-  // -------------------------------------------------------------------------
-  // Step 2: Save to Supabase (non-blocking on failure)
-  // Any error here is logged but does NOT fail the HTTP response.
-  // -------------------------------------------------------------------------
   let debateId = null;
   try {
     const result = await saveDebateToSupabase({
-      topic, personas, history, summary, verdict,
+      topic,
+      personas,
+      history,
+      summary,
+      verdict,
       obsidianPath: filePath,
+      personaCount,
     });
     debateId = result.id;
     console.log(`[obsidian] Saved to Supabase: debate ${debateId}`);
   } catch (err) {
-    // Log the error but don't let it fail the response -- Obsidian save succeeded.
     console.error('[obsidian] Supabase save error (non-fatal):', err.message);
   }
 
-  // Return the vault path and the Supabase debate ID (null if DB save failed).
-  res.json({ success: true, path: filePath, debateId });
+  return res.json({ success: true, path: filePath, debateId, persona_count: personaCount });
 });
 
 

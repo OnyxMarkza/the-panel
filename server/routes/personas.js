@@ -2,7 +2,24 @@ import { Router } from 'express';
 import { callGroq } from '../lib/groq.js';
 
 const router = Router();
+const DEFAULT_PERSONA_COUNT = 5;
+const MIN_PERSONA_COUNT = 3;
+const MAX_PERSONA_COUNT = 7;
 
+function normalizeTopic(input) {
+  if (typeof input !== 'string') return '';
+  return input.trim().replace(/\s+/g, ' ');
+}
+
+function normalizeCount(input) {
+  const parsed = Number.parseInt(input, 10);
+  if (!Number.isInteger(parsed)) return DEFAULT_PERSONA_COUNT;
+  return Math.min(Math.max(parsed, MIN_PERSONA_COUNT), MAX_PERSONA_COUNT);
+}
+
+router.post('/generate-personas', async (req, res) => {
+  const topic = normalizeTopic(req.body?.topic);
+  const count = normalizeCount(req.body?.count);
 /**
  * POST /api/generate-personas
  * Body: { topic: string, count?: number }
@@ -13,20 +30,15 @@ const router = Router();
 router.post('/generate-personas', async (req, res) => {
   const { topic, count } = req.body;
 
-  if (!topic || typeof topic !== 'string') {
-    return res.status(400).json({ error: true, message: 'A topic string is required.' });
+  if (!topic) {
+    return res.status(400).json({ error: true, code: 'VALIDATION_ERROR', message: 'A topic string is required.' });
   }
 
-  // Validate topic length (max 100 characters)
   if (topic.length > 100) {
-    return res.status(400).json({ error: true, message: 'Topic must be 100 characters or less.' });
+    return res.status(422).json({ error: true, code: 'VALIDATION_ERROR', message: 'Topic must be 100 characters or less.' });
   }
 
-  // Validate topic is not empty after trimming
-  if (!topic.trim()) {
-    return res.status(400).json({ error: true, message: 'Topic cannot be empty or only whitespace.' });
-  }
-
+  const systemPrompt = `You are a debate panel generator. When given a topic, create ${count} distinct panellists who could plausibly appear on a serious broadcast panel or at a professional conference.
   const requestedCount = Number.isInteger(count) ? count : Number.parseInt(count, 10);
   const personaCount = Number.isNaN(requestedCount)
     ? 5
@@ -35,11 +47,21 @@ router.post('/generate-personas', async (req, res) => {
   const systemPrompt = `You are a debate panel generator. When given a topic, you create ${personaCount} distinct panellists who could plausibly appear on a serious broadcast panel or at a professional conference.
 
 Guidelines for realism:
-- Give each panellist a concrete professional role and affiliation (e.g. "Consultant cardiologist, King's College Hospital" or "Senior policy analyst, WHO"). Avoid vague labels like "Tech visionary" or "Patient advocate".
-- Names should be diverse and ordinary — the kind you'd see on a conference programme, not a novel.
-- Each panellist should have a clear perspective rooted in their professional experience, not a caricature.
-- Tones should reflect how real professionals actually argue: some are blunt, some are careful with data, some use dry humour. Avoid melodramatic descriptors.
+- Give each panellist a concrete professional role and affiliation.
+- Names should be diverse and ordinary.
+- Each panellist should have a clear perspective rooted in professional experience.
 
+Return ONLY a valid JSON array with exactly ${count} objects. No markdown, no explanation.
+
+Each object must have:
+- name
+- archetype
+- bias
+- tone
+- stance (1-2 sentence summary)
+- relationships (array of objects with name and dynamic)`;
+
+  const userPrompt = `Generate ${count} debate personas for this topic: "${topic}"`;
 Return ONLY a valid JSON array with exactly ${personaCount} objects. No markdown, no explanation, no extra text.
 
 Each object must have:
@@ -60,15 +82,16 @@ Each object must have:
       { role: 'user', content: userPrompt },
     ], 2000);
 
-    // Extract JSON array from the response (handles cases where model wraps in backticks)
     const jsonMatch = raw.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      throw new Error('Model did not return a valid JSON array.');
+      return res.status(502).json({ error: true, code: 'UPSTREAM_FORMAT_ERROR', message: 'Model returned malformed payload.' });
     }
 
     let personas;
     try {
       personas = JSON.parse(jsonMatch[0]);
+    } catch {
+      return res.status(502).json({ error: true, code: 'UPSTREAM_FORMAT_ERROR', message: 'Model returned invalid JSON format.' });
     } catch (parseError) {
       console.error('[personas] JSON parse error:', parseError.message);
       throw new Error('Model returned invalid JSON format.');
@@ -78,22 +101,26 @@ Each object must have:
       throw new Error(`Expected exactly ${personaCount} personas.`);
     }
 
-    // Validate each persona object has required fields
-    for (let i = 0; i < personas.length; i++) {
-      const persona = personas[i];
-      if (!persona.name || !persona.archetype || !persona.bias || !persona.tone) {
-        throw new Error(`Persona ${i + 1} is missing required fields (name, archetype, bias, tone).`);
-      }
-      if (typeof persona.name !== 'string' || typeof persona.archetype !== 'string' ||
-          typeof persona.bias !== 'string' || typeof persona.tone !== 'string') {
-        throw new Error(`Persona ${i + 1} has invalid field types. All fields must be strings.`);
-      }
+    if (!Array.isArray(personas) || personas.length !== count) {
+      return res.status(502).json({ error: true, code: 'UPSTREAM_FORMAT_ERROR', message: `Expected exactly ${count} personas.` });
     }
 
-    res.json({ personas });
+    const normalized = personas.map((persona, index) => {
+      const fallbackName = `Panellist ${index + 1}`;
+      return {
+        name: typeof persona?.name === 'string' && persona.name.trim() ? persona.name.trim() : fallbackName,
+        archetype: typeof persona?.archetype === 'string' ? persona.archetype.trim() : 'Panel expert',
+        bias: typeof persona?.bias === 'string' ? persona.bias.trim() : 'No clear position provided.',
+        tone: typeof persona?.tone === 'string' ? persona.tone.trim() : 'measured',
+        stance: typeof persona?.stance === 'string' ? persona.stance.trim() : '',
+        relationships: Array.isArray(persona?.relationships) ? persona.relationships : [],
+      };
+    });
+
+    return res.json({ personas: normalized, persona_count: count });
   } catch (err) {
-    console.error('[personas] Error:', err.message);
-    res.status(500).json({ error: true, message: err.message });
+    console.error('[personas] Upstream error:', err.message);
+    return res.status(502).json({ error: true, code: 'UPSTREAM_ERROR', message: 'Persona generation upstream request failed.' });
   }
 });
 

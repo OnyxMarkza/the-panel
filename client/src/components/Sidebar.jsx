@@ -1,33 +1,26 @@
-import React, { useState } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 
-/**
- * Sidebar — Collapsible 280px panel showing past debates in the current session.
- *
- * Props:
- *   isOpen         — boolean controlling visibility
- *   onToggle       — called when the user wants to close the sidebar
- *   debates        — array of { id, topic, date } objects
- *   currentDebateId — id of the currently active debate (highlighted)
- *   onSelectDebate — called with the debate id when user clicks a row
- */
-export default function Sidebar({ isOpen, onToggle, debates, currentDebateId, onSelectDebate }) {
+function Sidebar({ isOpen, onToggle, debates, currentDebateId, onSelectDebate }) {
   const [search, setSearch] = useState('');
 
-  const filtered = debates.filter(d =>
-    d.topic.toLowerCase().includes(search.toLowerCase())
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = useMemo(
+    () => debates.filter((d) => (d.topic ?? '').toLowerCase().includes(normalizedSearch)),
+    [debates, normalizedSearch],
   );
+
+  const handleSearchChange = useCallback((e) => setSearch(e.target.value), []);
 
   return (
     <aside className={`sidebar${isOpen ? '' : ' collapsed'}`} aria-label="Debate history">
       <div className="sidebar__inner">
-        {/* Search */}
         <div className="sidebar__search-wrap">
           <input
             className="sidebar__search"
             type="text"
             placeholder="Search debates..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={handleSearchChange}
             aria-label="Search past debates"
           />
         </div>
@@ -48,7 +41,7 @@ export default function Sidebar({ isOpen, onToggle, debates, currentDebateId, on
                 debate={debate}
                 isActive={debate.id === currentDebateId}
                 index={i}
-                onSelect={() => onSelectDebate(debate.id)}
+                onSelect={onSelectDebate}
               />
             ))
           )}
@@ -58,31 +51,37 @@ export default function Sidebar({ isOpen, onToggle, debates, currentDebateId, on
   );
 }
 
-/**
- * DebateItem — A single row in the sidebar list.
- * Staggered animation delay based on its index.
- */
-function DebateItem({ debate, isActive, index, onSelect }) {
-  const formattedDate = debate.date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+function DebateItemBase({ debate, isActive, index, onSelect }) {
+  const safeDate = debate?.date ? new Date(debate.date) : new Date();
+  const formattedDate = Number.isNaN(safeDate.getTime())
+    ? 'Unknown date'
+    : safeDate.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+
+  const handleSelect = useCallback(() => onSelect(debate.id), [debate.id, onSelect]);
 
   return (
     <div
       className={`sidebar__item${isActive ? ' active' : ''}`}
       style={{ animationDelay: `${index * 40}ms` }}
-      onClick={onSelect}
+      onClick={handleSelect}
       role="button"
       tabIndex={0}
-      onKeyDown={e => e.key === 'Enter' && onSelect()}
+      onKeyDown={(e) => e.key === 'Enter' && handleSelect()}
       aria-current={isActive ? 'page' : undefined}
+      aria-label={`Open debate: ${debate.topic ?? 'Untitled topic'}`}
     >
-      <span className="sidebar__item-topic" title={debate.topic}>
-        {debate.topic}
+      <span className="sidebar__item-topic" title={debate.topic ?? 'Untitled topic'}>
+        {debate.topic ?? 'Untitled topic'}
       </span>
       <span className="sidebar__item-date">{formattedDate}</span>
     </div>
   );
 }
+
+const DebateItem = memo(DebateItemBase);
+
+export default memo(Sidebar);

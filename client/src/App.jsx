@@ -1,3 +1,4 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import React, { useEffect, useState } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import Header from './components/Header.jsx';
@@ -12,7 +13,10 @@ import StatusBar from './components/StatusBar.jsx';
 import SharedDebateView from './components/SharedDebateView.jsx';
 
 const TOTAL_ROUNDS = 3;
+const DEFAULT_PERSONA_COUNT = 5;
 
+export default function App() {
+  const [topic, setTopic] = useState('');
 function DebateHome() {
   // --- Core debate state ---
   const [topic, setTopic] = useState('');
@@ -22,6 +26,13 @@ function DebateHome() {
   const [history, setHistory] = useState([]);
   const [summary, setSummary] = useState('');
   const [verdict, setVerdict] = useState('');
+  const [personaCount, setPersonaCount] = useState(DEFAULT_PERSONA_COUNT);
+
+  const [status, setStatus] = useState('');
+  const [isActive, setIsActive] = useState(false);
+  const [phase, setPhase] = useState('input');
+  const [typingIndex, setTypingIndex] = useState(-1);
+  const [savedPath, setSavedPath] = useState('');
 
   // --- UI state ---
   const [status, setStatus] = useState('');
@@ -32,7 +43,6 @@ function DebateHome() {
   const [debateId, setDebateId] = useState('');
   const [currentRound, setCurrentRound] = useState(0);
 
-  // --- Layout state ---
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // --- Debate history (current session only, shown in sidebar) ---
@@ -40,7 +50,12 @@ function DebateHome() {
   const [currentDebateId, setCurrentDebateId] = useState(null);
   const [shareUrl, setShareUrl] = useState('');
 
-  // Load debates from localStorage on mount
+  const mountedRef = useRef(true);
+  const inFlightRef = useRef(false);
+  const requestIdRef = useRef(0);
+
+  const isLoading = isActive || inFlightRef.current;
+
   useEffect(() => {
     const savedDebates = localStorage.getItem('the-panel-debates');
     if (savedDebates) {
@@ -51,6 +66,10 @@ function DebateHome() {
         console.warn('Failed to parse saved debates from localStorage:', err);
       }
     }
+  }, []);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
   }, []);
 
   // Route-level flow sanity: support "/" and "/debate/:id" directly.
@@ -65,14 +84,14 @@ function DebateHome() {
   // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(event) {
-      // Ctrl/Cmd + N for new debate
       if ((event.ctrlKey || event.metaKey) && event.key === 'n') {
         event.preventDefault();
         handleNewDebate();
       }
-      // Ctrl/Cmd + S for save (when debate is done)
+
       if ((event.ctrlKey || event.metaKey) && event.key === 's' && phase === 'done') {
         event.preventDefault();
+        if (!savedPath) {
         if (!savedPath && !debateId) {
           setStatus('Save functionality would be triggered here (Ctrl+S)');
         }
@@ -83,7 +102,15 @@ function DebateHome() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [phase, savedPath, debateId]);
 
+  const safeSet = useCallback((setter, value, requestId) => {
+    if (!mountedRef.current) return;
+    if (requestId !== requestIdRef.current) return;
+    setter(value);
+  }, []);
+
   function handleNewDebate() {
+    requestIdRef.current += 1; // invalidate stale async work
+    inFlightRef.current = false;
     setTopic('');
     setPersonaCount(5);
     setPersonas([]);
@@ -96,6 +123,12 @@ function DebateHome() {
     setTypingIndex(-1);
     setCurrentRound(0);
     setPhase('input');
+    setIsActive(false);
+    setPersonaCount(DEFAULT_PERSONA_COUNT);
+  }
+
+  async function requestJson(url, payload, fallbackMessage) {
+    let response;
     setCurrentDebateId(null);
     setShareUrl('');
     if (window.location.pathname !== '/') {
@@ -119,50 +152,109 @@ function DebateHome() {
 
     let generatedPersonas;
     try {
-      const res = await fetch('/api/generate-personas', {
+      response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
         body: JSON.stringify({ topic: submittedTopic, count: submittedPersonaCount }),
       });
-      const data = await res.json();
-      if (data.error) throw new Error(data.message);
-      generatedPersonas = data.personas;
-      setPersonas(generatedPersonas);
-    } catch (err) {
-      const errorMessage = err.message.toLowerCase();
-      let userFriendlyMessage = 'Unable to generate debate panel. Please try again.';
+    } catch {
+      throw new Error(fallbackMessage);
+    }
 
-      if (errorMessage.includes('timeout')) {
-        userFriendlyMessage = 'Request timed out. The AI service is busy. Please try again in a moment.';
-      } else if (errorMessage.includes('rate limit') || errorMessage.includes('too many')) {
-        userFriendlyMessage = 'Too many requests. Please wait a few minutes before trying again.';
-      } else if (errorMessage.includes('topic') && errorMessage.includes('length')) {
-        userFriendlyMessage = 'Topic is too long. Please use 100 characters or less.';
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error(fallbackMessage);
+    }
+
+    if (!response.ok || data.error) {
+      throw new Error(data?.message || fallbackMessage);
+    }
+
+    if (!data || typeof data !== 'object') {
+      throw new Error(fallbackMessage);
+    }
+
+    return data;
+  }
+
+  async function handleTopicSubmit(submittedTopic, submittedCount = DEFAULT_PERSONA_COUNT) {
+    if (inFlightRef.current) return;
+
+    const normalizedTopic = typeof submittedTopic === 'string' ? submittedTopic.trim() : '';
+    const normalizedCount = Number.isInteger(submittedCount)
+      ? Math.min(Math.max(submittedCount, 3), 7)
+      : DEFAULT_PERSONA_COUNT;
+
+    if (!normalizedTopic) {
+      setStatus('Please enter a topic.');
+      return;
+    }
+
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    inFlightRef.current = true;
+
+    safeSet(setTopic, normalizedTopic, requestId);
+    safeSet(setPersonaCount, normalizedCount, requestId);
+    safeSet(setPhase, 'personas', requestId);
+    safeSet(setStatus, 'Assembling the panel...', requestId);
+    safeSet(setIsActive, true, requestId);
+
+    let generatedPersonas;
+    try {
+      const data = await requestJson(
+        '/api/generate-personas',
+        { topic: normalizedTopic, count: normalizedCount },
+        'Unable to generate debate panel. Please try again.',
+      );
+
+      generatedPersonas = Array.isArray(data.personas) ? data.personas : [];
+      if (generatedPersonas.length === 0) {
+        throw new Error('Unable to generate debate panel. Please try again.');
       }
 
-      setStatus(`Panel assembly failed: ${userFriendlyMessage}`);
-      setIsActive(false);
+      safeSet(setPersonas, generatedPersonas, requestId);
+    } catch (err) {
+      safeSet(setStatus, `Panel assembly failed: ${err.message}`, requestId);
+      safeSet(setIsActive, false, requestId);
+      inFlightRef.current = false;
       return;
     }
 
     await delay(1200);
+    if (requestId !== requestIdRef.current || !mountedRef.current) return;
 
+    safeSet(setPhase, 'debate', requestId);
     setPhase('debate');
     let currentHistory = [];
 
     for (let round = 1; round <= TOTAL_ROUNDS; round++) {
-      setCurrentRound(round);
-      setStatus(`Round ${round} of ${TOTAL_ROUNDS} — the panel is deliberating...`);
+      safeSet(setCurrentRound, round, requestId);
+      safeSet(setStatus, `Round ${round} of ${TOTAL_ROUNDS} — the panel is deliberating...`, requestId);
 
       try {
-        const res = await fetch('/api/debate-round', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const data = await requestJson(
+          '/api/debate-round',
+          {
             personas: generatedPersonas,
             history: currentHistory,
-            topic: submittedTopic,
+            topic: normalizedTopic,
             roundNumber: round,
+          },
+          'Debate round failed. The discussion may be incomplete.',
+        );
+
+        const roundHistory = Array.isArray(data.history) ? data.history : [];
+        for (let i = currentHistory.length; i < roundHistory.length; i++) {
+          if (requestId !== requestIdRef.current || !mountedRef.current) return;
+          safeSet(setTypingIndex, i, requestId);
+          safeSet(setHistory, roundHistory.slice(0, i + 1), requestId);
+
+          const msg = roundHistory[i]?.content;
+          await delay(typeof msg === 'string' ? msg.length * 12 + 400 : 700);
           }),
         });
         const data = await res.json();
@@ -174,8 +266,11 @@ function DebateHome() {
           await delay(data.history[i].content.length * 12 + 400);
         }
 
-        currentHistory = data.history;
+        currentHistory = roundHistory;
       } catch (err) {
+        safeSet(setStatus, `Round ${round} issue: ${err.message}`, requestId);
+        safeSet(setIsActive, false, requestId);
+        inFlightRef.current = false;
         const errorMessage = err.message.toLowerCase();
         let userFriendlyMessage = 'Debate round failed. The discussion may be incomplete.';
 
@@ -192,6 +287,9 @@ function DebateHome() {
       }
     }
 
+    safeSet(setTypingIndex, -1, requestId);
+    safeSet(setStatus, 'Moderator is synthesising the debate...', requestId);
+    safeSet(setPhase, 'summary', requestId);
     setTypingIndex(-1);
 
     setStatus('Moderator is synthesising the debate...');
@@ -200,30 +298,24 @@ function DebateHome() {
     let debateSummary;
     let debateVerdict;
     try {
-      const res = await fetch('/api/summarise', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: submittedTopic, history: currentHistory }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.message);
-      debateSummary = data.summary;
-      debateVerdict = data.verdict;
-      setSummary(debateSummary);
-      setVerdict(debateVerdict);
+      const data = await requestJson(
+        '/api/summarise',
+        { topic: normalizedTopic, history: currentHistory },
+        'Unable to generate debate summary. The discussion is still available.',
+      );
+      debateSummary = typeof data.summary === 'string' ? data.summary : '';
+      debateVerdict = typeof data.verdict === 'string' ? data.verdict : 'No clear verdict reached.';
+
+      safeSet(setSummary, debateSummary, requestId);
+      safeSet(setVerdict, debateVerdict, requestId);
     } catch (err) {
-      const errorMessage = err.message.toLowerCase();
-      let userFriendlyMessage = 'Unable to generate debate summary. The discussion is still available.';
-
-      if (errorMessage.includes('timeout')) {
-        userFriendlyMessage = 'Summary generation timed out. The debate transcript is still available.';
-      }
-
-      setStatus(`Summary failed: ${userFriendlyMessage}`);
-      setIsActive(false);
+      safeSet(setStatus, `Summary failed: ${err.message}`, requestId);
+      safeSet(setIsActive, false, requestId);
+      inFlightRef.current = false;
       return;
     }
 
+    safeSet(setStatus, 'Writing debate to Obsidian vault...', requestId);
     setStatus('Saving debate to database...');
     // -- Step 4: Save to configured storage backend --
     setStatus('Saving debate transcript...');
@@ -233,16 +325,26 @@ function DebateHome() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': import.meta.env.VITE_SAVE_API_KEY || 'default-key-for-dev'
+          'x-api-key': import.meta.env.VITE_SAVE_API_KEY || 'default-key-for-dev',
         },
         body: JSON.stringify({
-          topic: submittedTopic,
+          topic: normalizedTopic,
           personas: generatedPersonas,
           history: currentHistory,
           summary: debateSummary,
           verdict: debateVerdict,
+          persona_count: normalizedCount,
         }),
       });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data?.message || 'Could not save to Obsidian.');
+      const safePath = typeof data.path === 'string' ? data.path : '';
+
+      safeSet(setSavedPath, safePath, requestId);
+      safeSet(setStatus, safePath ? `Saved to Obsidian: ${safePath.split('/').pop()}` : 'Saved to Obsidian.', requestId);
+    } catch (err) {
+      safeSet(setStatus, `Save issue: ${err.message}`, requestId);
       const data = await res.json();
       if (data.error) throw new Error(data.message);
       setSavedPath(data.path ?? '');
@@ -288,9 +390,19 @@ function DebateHome() {
       setStatus(`Save issue: ${userFriendlyMessage}`);
     }
 
-    setIsActive(false);
-    setPhase('done');
+    safeSet(setIsActive, false, requestId);
+    safeSet(setPhase, 'done', requestId);
+    inFlightRef.current = false;
 
+    const newDebate = { id: Date.now(), topic: normalizedTopic, date: new Date(), persona_count: normalizedCount };
+    setDebates((prev) => [...prev, newDebate]);
+    setCurrentDebateId(newDebate.id);
+  }
+
+  const sidebarDebates = useMemo(
+    () => debates.map((debate) => ({ ...debate, persona_count: debate.persona_count ?? DEFAULT_PERSONA_COUNT })),
+    [debates],
+  );
     const newDebate = { id: Date.now(), topic: submittedTopic, date: new Date() };
     // Register this debate in the sidebar history
     const newDebate = { id: savedDebateId || Date.now(), topic: submittedTopic, date: new Date() };
@@ -315,6 +427,7 @@ function DebateHome() {
     <div className="app">
       <Header
         onNewDebate={handleNewDebate}
+        onToggleSidebar={() => setSidebarOpen((open) => !open)}
         onToggleSidebar={() => setSidebarOpen(open => !open)}
         onOpenSettings={() => {}}
       />
@@ -322,14 +435,15 @@ function DebateHome() {
       <div className="main-layout">
         <Sidebar
           isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen(open => !open)}
-          debates={debates}
+          onToggle={() => setSidebarOpen((open) => !open)}
+          debates={sidebarDebates}
           currentDebateId={currentDebateId}
           onSelectDebate={setCurrentDebateId}
         />
 
         <main className="main-content">
           {phase === 'input' ? (
+            <TopicInput onSubmit={handleTopicSubmit} isLoading={isLoading} defaultPersonaCount={personaCount} />
             <TopicInput onSubmit={handleTopicSubmit} isLoading={false} />
           ) : (
             <div className="debate-content">
@@ -347,7 +461,7 @@ function DebateHome() {
                   </h3>
                   <div style={styles.personaGrid}>
                     {personas.map((p, i) => (
-                      <PersonaCard key={p.name} persona={p} index={i} />
+                      <PersonaCard key={p.name ?? `persona-${i}`} persona={p} index={i} />
                     ))}
                   </div>
                 </section>
@@ -377,6 +491,7 @@ function DebateHome() {
                 </section>
               )}
 
+              {phase === 'done' && savedPath && (
               {phase === 'done' && (savedPath || debateId) && (
                 <div style={styles.completionNote}>
                   Debate archived &middot; {new Date().toLocaleDateString('en-GB', {
@@ -416,7 +531,7 @@ export default function App() {
 }
 
 function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const styles = {

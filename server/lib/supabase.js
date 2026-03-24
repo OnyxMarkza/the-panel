@@ -160,12 +160,14 @@ export async function insertMessages(debateId, messagesArray, personaIdMap) {
 export async function fetchDebates(limit = 10, offset = 0) {
   const { data, error, count } = await supabase
     .from('debates')
+    .select('id, topic, created_at, summary, verdict, obsidian_path, persona_count', { count: 'exact' })
     .select('id, topic, persona_count, created_at, summary, verdict, obsidian_path', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) throw new Error(`[supabase] fetchDebates failed: ${error.message}`);
-  return { debates: data, total: count };
+  const normalized = (data ?? []).map((row) => ({ ...row, persona_count: row.persona_count ?? 5 }));
+  return { debates: normalized, total: count };
 }
 
 /**
@@ -204,7 +206,7 @@ export async function fetchDebateById(id) {
 
   if (messagesError) throw new Error(`[supabase] fetchMessages failed: ${messagesError.message}`);
 
-  return { ...debate, personas, messages };
+  return { ...debate, persona_count: debate.persona_count ?? 5, personas, messages };
 }
 
 /**
@@ -218,13 +220,14 @@ export async function fetchDebateById(id) {
 export async function searchDebates(query, limit = 20) {
   const { data, error } = await supabase
     .from('debates')
+    .select('id, topic, created_at, summary, verdict, persona_count')
     .select('id, topic, persona_count, created_at, summary, verdict')
     .ilike('topic', `%${query}%`)
     .order('created_at', { ascending: false })
     .limit(limit);
 
   if (error) throw new Error(`[supabase] searchDebates failed: ${error.message}`);
-  return data;
+  return (data ?? []).map((row) => ({ ...row, persona_count: row.persona_count ?? 5 }));
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +251,8 @@ export async function searchDebates(query, limit = 20) {
  * @param {string} [params.obsidianPath] - Optional vault file path to store alongside the record
  * @returns {Promise<{ id: string }>}
  */
+export async function saveDebateToSupabase({ topic, personas, history, summary, verdict, obsidianPath, personaCount = 5 }) {
+  // Create the parent debate row first so we have an ID for foreign keys
 export async function saveDebateToSupabase({ topic, personas, history, summary, verdict, obsidianPath }) {
   const personaCount = Array.isArray(personas) && personas.length > 0 ? personas.length : 5;
   // Create the parent debate row first so we have an ID for foreign keys
