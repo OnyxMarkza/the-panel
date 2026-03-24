@@ -29,7 +29,10 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
     e.preventDefault();
     const normalizedTopic = topic.trim();
     const safeCount = Number.isInteger(personaCount) ? personaCount : defaultPersonaCount;
-    if (normalizedTopic && !isLoading) onSubmit(normalizedTopic, safeCount);
+
+    if (normalizedTopic && !isLoading) {
+      onSubmit(normalizedTopic, safeCount);
+    }
   }
 
   async function handleSurpriseMe() {
@@ -92,18 +95,27 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
           </div>
         </div>
 
-        <label style={styles.selectLabel} htmlFor="persona-count-select">Panel size</label>
-        <select
-          id="persona-count-select"
-          value={personaCount}
-          onChange={(e) => setPersonaCount(Number(e.target.value))}
-          disabled={isLoading}
-          style={styles.select}
-        >
-          {PERSONA_COUNT_OPTIONS.map((countOption) => (
-            <option key={countOption} value={countOption}>{countOption} panellists</option>
-          ))}
-        </select>
+        <div style={styles.rangeWrapper}>
+          <div style={styles.rangeLabelRow}>
+            <span style={styles.rangeLabel}>Panel size</span>
+            <span style={styles.rangeValue}>{personaCount}</span>
+          </div>
+          <input
+            type="range"
+            min="3"
+            max="7"
+            step="1"
+            value={personaCount}
+            onChange={(e) => setPersonaCount(Number(e.target.value))}
+            disabled={isLoading}
+            aria-label="Persona count"
+            style={styles.rangeInput}
+          />
+          <div style={styles.rangeTicks}>
+            <span>3</span>
+            <span>7</span>
+          </div>
+        </div>
 
         <div style={styles.actionsRow}>
           <button type="button" disabled={isLoading || isSuggesting} onClick={handleSurpriseMe} style={styles.ghostButton}>
@@ -112,6 +124,8 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
           <button
             type="submit"
             disabled={isDisabled}
+            aria-disabled={isDisabled}
+            aria-label={isLoading ? 'Convene panel in progress' : 'Convene the panel'}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             style={{ ...styles.button, transform: hovered && !isDisabled ? 'translateY(-2px)' : 'translateY(0)', opacity: isDisabled ? 0.45 : 1 }}
@@ -136,22 +150,241 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
 }
 
 const styles = {
-  wrapper: { display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)' },
-  masthead: { display: 'flex', flexDirection: 'column', gap: '0.5rem' },
-  eyebrow: { fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase' },
-  title: { fontFamily: "'Inter', sans-serif", color: 'var(--text-primary)' },
-  subtitle: { fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-muted)', margin: 0 },
-  form: { display: 'flex', flexDirection: 'column', gap: '0.75rem' },
-  inputLabel: { fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-muted)', fontSize: '0.72rem' },
-  inputWrapper: { border: '1px solid var(--border)', borderRadius: '4px', padding: '0.6rem 0.7rem' },
-  input: { width: '100%', background: 'transparent', color: 'var(--text-primary)', border: 0, outline: 0, fontFamily: "'Inter', sans-serif" },
-  charCounter: { textAlign: 'right', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.65rem' },
-  selectLabel: { fontFamily: "'JetBrains Mono', monospace", fontSize: '0.72rem', color: 'var(--text-muted)' },
-  select: { width: '100%', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '4px', padding: '0.5rem' },
-  actionsRow: { display: 'flex', gap: '0.6rem', flexWrap: 'wrap' },
-  button: { border: '1px solid var(--gold)', background: 'var(--gold)', color: 'var(--bg-main)', borderRadius: '4px', padding: '0.5rem 0.75rem', cursor: 'pointer' },
-  ghostButton: { border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', borderRadius: '4px', padding: '0.5rem 0.75rem', cursor: 'pointer' },
-  error: { margin: 0, fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-muted)', fontSize: '0.72rem' },
-  suggestionsWrap: { display: 'flex', gap: '0.4rem', flexWrap: 'wrap' },
-  suggestionChip: { border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', borderRadius: '999px', padding: '0.3rem 0.6rem', cursor: 'pointer' },
+  wrapper: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 'calc(100vh - var(--header-height) - 4rem)',
+    padding: 'var(--spacing-xl)',
+    gap: 'var(--spacing-md)',
+    animation: 'fadeInUp 0.6s var(--ease-out) both',
+  },
+  crest: {
+    marginBottom: 'var(--spacing-xs)',
+    opacity: 0.88,
+  },
+  masthead: {
+    textAlign: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '0.3rem',
+  },
+  eyebrow: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.58rem',
+    letterSpacing: '0.24em',
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    opacity: 0.7,
+  },
+  title: {
+    fontFamily: "'Inter', sans-serif",
+    fontWeight: '700',
+    fontSize: 'clamp(3.5rem, 8vw, 6.5rem)',
+    color: 'var(--gold)',
+    letterSpacing: '-0.02em',
+    lineHeight: '1',
+    marginTop: '0.1rem',
+  },
+  ornament: {
+    color: 'var(--gold)',
+    opacity: 0.3,
+    fontSize: '0.62rem',
+    letterSpacing: '0.5em',
+    marginTop: '0.25rem',
+  },
+  subtitle: {
+    fontFamily: "'JetBrains Mono', monospace",
+    color: 'var(--text-muted)',
+    fontSize: '0.78rem',
+    letterSpacing: '0.05em',
+    lineHeight: '1.65',
+    marginTop: 'var(--spacing-xs)',
+  },
+  form: {
+    width: '100%',
+    maxWidth: '680px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--spacing-xs)',
+    marginTop: 'var(--spacing-md)',
+  },
+  inputLabel: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.58rem',
+    letterSpacing: '0.2em',
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    alignSelf: 'flex-start',
+    marginBottom: '0.15rem',
+  },
+  inputWrapper: {
+    border: '1px solid',
+    borderRadius: '3px',
+    background: 'rgba(255, 255, 255, 0.02)',
+    transition: 'border-color 0.2s var(--ease-out), box-shadow 0.3s var(--ease-out)',
+    padding: '14px 18px',
+    position: 'relative',
+  },
+  input: {
+    width: '100%',
+    background: 'transparent',
+    border: 'none',
+    outline: 'none',
+    color: 'var(--text-primary)',
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '1.15rem',
+    lineHeight: '1.5',
+    paddingRight: '64px',
+  },
+  charCounter: {
+    position: 'absolute',
+    right: '16px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.62rem',
+    fontWeight: '500',
+    transition: 'color 0.2s var(--ease-out)',
+  },
+  rangeWrapper: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.35rem',
+    margin: '0.2rem 0 0.45rem',
+  },
+  rangeLabelRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  rangeLabel: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.58rem',
+    color: 'var(--text-muted)',
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase',
+  },
+  rangeValue: {
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '0.85rem',
+    color: 'var(--gold)',
+    fontWeight: '600',
+  },
+  rangeInput: {
+    width: '100%',
+    accentColor: 'var(--gold)',
+    cursor: 'pointer',
+  },
+  rangeTicks: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.58rem',
+    color: 'var(--text-muted)',
+    opacity: 0.75,
+    letterSpacing: '0.08em',
+  },
+  actionsRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 'var(--spacing-xs)',
+    gap: 'var(--spacing-sm)',
+  },
+  ghostButton: {
+    background: 'transparent',
+    border: '1px solid var(--border)',
+    color: 'var(--text-secondary)',
+    borderRadius: '3px',
+    padding: '12px 14px',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.62rem',
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase',
+    transition: 'border-color 0.2s var(--ease-out), color 0.2s var(--ease-out)',
+  },
+  button: {
+    background: 'var(--gold)',
+    color: '#1a1a1a',
+    border: 'none',
+    borderRadius: '3px',
+    padding: '12px 28px',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.68rem',
+    fontWeight: '500',
+    letterSpacing: '0.14em',
+    textTransform: 'uppercase',
+    transition: 'opacity 0.2s var(--ease-out), transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out)',
+  },
+  suggestionsPanel: {
+    width: '100%',
+    maxWidth: '680px',
+    border: '1px solid var(--border)',
+    background: 'rgba(255,255,255,0.02)',
+    borderRadius: '4px',
+    padding: '14px',
+    marginTop: 'var(--spacing-xs)',
+  },
+  suggestionsHeader: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.58rem',
+    letterSpacing: '0.2em',
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    marginBottom: '12px',
+  },
+  skeletonGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '10px',
+  },
+  skeletonCard: {
+    height: '44px',
+    borderRadius: '999px',
+    background: 'linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.1), rgba(255,255,255,0.04))',
+    backgroundSize: '200% 100%',
+    animation: 'shimmer 1.2s linear infinite',
+  },
+  chipsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '10px',
+  },
+  chip: {
+    textAlign: 'left',
+    border: '1px solid rgba(226, 179, 64, 0.35)',
+    color: 'var(--text-secondary)',
+    background: 'rgba(226, 179, 64, 0.06)',
+    padding: '10px 12px',
+    borderRadius: '999px',
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '0.88rem',
+    lineHeight: '1.3',
+    cursor: 'pointer',
+    animation: 'fadeInUp 0.35s var(--ease-out) both',
+    transition: 'border-color 0.2s var(--ease-out), transform 0.2s var(--ease-out)',
+  },
+  errorText: {
+    margin: '2px 0 12px',
+    color: 'var(--text-muted)',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.7rem',
+    lineHeight: '1.5',
+  },
+  meta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.4rem',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.62rem',
+    color: 'var(--text-muted)',
+    opacity: 0.7,
+    marginTop: 'var(--spacing-sm)',
+  },
+  metaDot: {
+    opacity: 0.5,
+  },
 };

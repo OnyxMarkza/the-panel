@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import Sidebar from './components/Sidebar.jsx';
@@ -21,12 +21,13 @@ function DebateHome() {
   const [history, setHistory] = useState([]);
   const [summary, setSummary] = useState('');
   const [verdict, setVerdict] = useState('');
+
+  // --- UI state ---
   const [status, setStatus] = useState('');
   const [isActive, setIsActive] = useState(false);
-  const [phase, setPhase] = useState('input');
+  const [phase, setPhase] = useState('input'); // 'input' | 'personas' | 'debate' | 'summary' | 'done'
   const [typingIndex, setTypingIndex] = useState(-1);
   const [savedPath, setSavedPath] = useState('');
-  const [debateId, setDebateId] = useState('');
   const [currentRound, setCurrentRound] = useState(0);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -55,6 +56,26 @@ function DebateHome() {
     mountedRef.current = false;
   }, []);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'n') {
+        event.preventDefault();
+        handleNewDebate();
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === 's' && phase === 'done') {
+        event.preventDefault();
+        if (!savedPath) {
+          setStatus('Save functionality would be triggered here (Ctrl+S)');
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [phase, savedPath]);
+
   const safeSet = useCallback((setter, value, requestId) => {
     if (!mountedRef.current || requestId !== requestIdRef.current) return;
     setter(value);
@@ -71,17 +92,19 @@ function DebateHome() {
     setVerdict('');
     setStatus('');
     setSavedPath('');
-    setDebateId('');
     setTypingIndex(-1);
     setCurrentRound(0);
     setPhase('input');
     setIsActive(false);
     setCurrentDebateId(null);
+    setShareUrl('');
+    if (window.location.pathname !== '/') {
+      window.history.replaceState({}, '', '/');
+    }
   }
 
   async function requestJson(url, payload, fallbackMessage) {
     let response;
-
     try {
       response = await fetch(url, {
         method: 'POST',
@@ -103,9 +126,65 @@ function DebateHome() {
       throw new Error(data?.message || fallbackMessage);
     }
 
+    if (!data || typeof data !== 'object') {
+      throw new Error(fallbackMessage);
+    }
+
     return data;
   }
 
+  async function loadDebateById(debateId) {
+    if (!debateId) return;
+
+    setStatus('Loading shared debate...');
+    setIsActive(true);
+
+    try {
+      const res = await fetch(`/api/debates/${debateId}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.message || 'Unable to load debate.');
+
+      const personaLookup = new Map((data.personas || []).map((p) => [p.id, p.name]));
+      const hydratedHistory = (data.messages || []).map((msg) => ({
+        persona: personaLookup.get(msg.persona_id) || 'Unknown Speaker',
+        content: msg.content,
+      }));
+
+      setTopic(data.topic || '');
+      setPersonas(data.personas || []);
+      setHistory(hydratedHistory);
+      setSummary(data.summary || '');
+      setVerdict(data.verdict || '');
+      setCurrentDebateId(data.id || debateId);
+      setShareUrl(`${window.location.origin}/debate/${data.id || debateId}`);
+      setPhase('done');
+      setStatus('Shared debate loaded.');
+    } catch (err) {
+      setStatus(`Could not load shared debate: ${err.message}`);
+      setPhase('input');
+    } finally {
+      setIsActive(false);
+    }
+  }
+
+  async function handleSelectDebate(debateId) {
+    setCurrentDebateId(debateId);
+    if (!debateId) return;
+
+    if (typeof debateId === 'string') {
+      window.history.replaceState({}, '', `/debate/${debateId}`);
+      await loadDebateById(debateId);
+      return;
+    }
+
+    // Local-only entries (numeric IDs) do not have a shareable backend record.
+    setShareUrl('');
+  }
+
+  /**
+   * Main orchestration function — called when the user submits a topic.
+   * Each step is sequential: we await each API call before moving on.
+   */
   async function handleTopicSubmit(submittedTopic, submittedCount = DEFAULT_PERSONA_COUNT) {
     if (inFlightRef.current) return;
 
@@ -151,6 +230,10 @@ function DebateHome() {
       return;
     }
 
+    await delay(1200);
+    if (requestId !== requestIdRef.current || !mountedRef.current) return;
+
+    safeSet(setPhase, 'debate', requestId);
     let currentHistory = [];
     for (let round = 1; round <= TOTAL_ROUNDS; round += 1) {
       safeSet(setCurrentRound, round, requestId);
@@ -167,21 +250,33 @@ function DebateHome() {
         for (let i = currentHistory.length; i < roundHistory.length; i += 1) {
           safeSet(setTypingIndex, i, requestId);
           safeSet(setHistory, roundHistory.slice(0, i + 1), requestId);
-          const messageLength = typeof roundHistory[i]?.content === 'string' ? roundHistory[i].content.length : 0;
-          await new Promise((resolve) => setTimeout(resolve, Math.min(1800, messageLength * 12 + 300)));
+
+          const msg = roundHistory[i]?.content;
+          await delay(typeof msg === 'string' ? msg.length * 12 + 400 : 700);
         }
 
         currentHistory = roundHistory;
       } catch (err) {
-        safeSet(setStatus, `Round ${round} issue: ${err.message}`, requestId);
+        const errorMessage = err.message.toLowerCase();
+        let userFriendlyMessage = 'Debate round failed. The discussion may be incomplete.';
+
+        if (errorMessage.includes('timeout')) {
+          userFriendlyMessage = 'Round timed out. The AI service is busy. Continuing with available responses.';
+        } else if (errorMessage.includes('rate limit') || errorMessage.includes('too many')) {
+          userFriendlyMessage = 'Rate limit reached. Waiting before continuing...';
+          await delay(5000);
+        }
+
+        safeSet(setStatus, `Round ${round} issue: ${userFriendlyMessage}`, requestId);
         safeSet(setIsActive, false, requestId);
         inFlightRef.current = false;
         return;
       }
     }
 
-    let debateSummary = '';
-    let debateVerdict = '';
+    safeSet(setTypingIndex, -1, requestId);
+    safeSet(setStatus, 'Moderator is synthesising the debate...', requestId);
+    safeSet(setPhase, 'summary', requestId);
 
     try {
       safeSet(setPhase, 'summary', requestId);
@@ -205,6 +300,8 @@ function DebateHome() {
       return;
     }
 
+    safeSet(setStatus, 'Saving debate transcript...', requestId);
+
     try {
       safeSet(setStatus, 'Saving debate transcript...', requestId);
 
@@ -217,15 +314,41 @@ function DebateHome() {
           summary: debateSummary,
           verdict: debateVerdict,
           persona_count: normalizedCount,
-        },
-        'Could not save debate. The transcript is still available in your browser.',
-      );
+        }),
+      });
 
-      safeSet(setSavedPath, typeof saveData.path === 'string' ? saveData.path : '', requestId);
-      safeSet(setDebateId, typeof saveData.id === 'string' ? saveData.id : '', requestId);
-      safeSet(setCurrentDebateId, saveData.id || null, requestId);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data?.message || 'Could not save debate.');
+
+      const returnedDebateId = data.id || null;
+      const returnedPath = data.path || '';
+
+      safeSet(setSavedPath, returnedPath, requestId);
+      safeSet(setCurrentDebateId, returnedDebateId, requestId);
+
+      if (returnedDebateId) {
+        const generatedShareUrl = `${window.location.origin}/debate/${returnedDebateId}`;
+        safeSet(setShareUrl, generatedShareUrl, requestId);
+        window.history.replaceState({}, '', `/debate/${returnedDebateId}`);
+        safeSet(setStatus, 'Debate saved and share link generated.', requestId);
+      } else if (returnedPath) {
+        safeSet(setStatus, `Saved locally: ${returnedPath.split('/').pop()}`, requestId);
+      } else if (data.success) {
+        safeSet(setStatus, 'Debate save completed.', requestId);
+      } else {
+        safeSet(setStatus, 'Debate save failed; transcript remains available locally.', requestId);
+      }
     } catch (err) {
-      safeSet(setStatus, `Save issue: ${err.message}`, requestId);
+      const errorMessage = err.message.toLowerCase();
+      let userFriendlyMessage = 'Could not save debate. The transcript is still available in your browser.';
+
+      if (errorMessage.includes('api key') || errorMessage.includes('unauthorized')) {
+        userFriendlyMessage = 'Authentication failed. Please check your save settings.';
+      } else if (errorMessage.includes('vault') || errorMessage.includes('obsidian')) {
+        userFriendlyMessage = 'Local vault save failed. Please check your local save settings.';
+      }
+
+      safeSet(setStatus, `Save issue: ${userFriendlyMessage}`, requestId);
     }
 
     safeSet(setTypingIndex, -1, requestId);
@@ -235,18 +358,22 @@ function DebateHome() {
     safeSet(setStatus, 'Debate complete.', requestId);
     inFlightRef.current = false;
 
-    setDebates((prev) => [
-      { id: debateId || Date.now(), topic: normalizedTopic, date: new Date().toISOString() },
-      ...prev,
-    ].slice(0, 100));
+    const newDebate = { id: Date.now(), topic: normalizedTopic, date: new Date(), persona_count: normalizedCount };
+    setDebates((prev) => [...prev, newDebate]);
+    setCurrentDebateId(newDebate.id);
   }
+
+  const sidebarDebates = useMemo(
+    () => debates.map((debate) => ({ ...debate, persona_count: debate.persona_count ?? DEFAULT_PERSONA_COUNT })),
+    [debates],
+  );
 
   return (
     <div className="app">
       <Header
         onNewDebate={handleNewDebate}
-        onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
-        onOpenSettings={() => setStatus('Settings coming soon.')}
+        onToggleSidebar={() => setSidebarOpen((open) => !open)}
+        onOpenSettings={() => {}}
       />
 
       <StatusBar status={status} isActive={isActive} />
@@ -261,22 +388,76 @@ function DebateHome() {
         />
 
         <main className="main-content">
-          <div className="debate-content">
-            {phase === 'input' && (
-              <TopicInput
-                onSubmit={handleTopicSubmit}
-                isLoading={isActive}
-                defaultPersonaCount={personaCount}
-              />
-            )}
+          {phase === 'input' ? (
+            <TopicInput onSubmit={handleTopicSubmit} isLoading={isLoading} defaultPersonaCount={personaCount} />
+          ) : (
+            <div className="debate-content">
+              <StatusBar status={status} isActive={isActive} />
 
-            {personas.length > 0 && phase !== 'input' && (
-              <section>
-                <h3 style={sectionHeading}>The Panellists</h3>
-                <div style={personaGrid}>
-                  {personas.map((persona, index) => (
-                    <PersonaCard key={`${persona.name}-${index}`} persona={persona} index={index} />
-                  ))}
+              <header style={styles.topicHeader}>
+                <div style={styles.topicLabel}>The Panel is debating</div>
+                <h2 style={styles.topicText}>{topic}</h2>
+              </header>
+
+              {personas.length > 0 && (
+                <section>
+                  <h3 style={styles.sectionHeading}>
+                    The Panellists ({personas.length || personaCount})
+                  </h3>
+                  <div style={styles.personaGrid}>
+                    {personas.map((p, i) => (
+                      <PersonaCard key={p.name ?? `persona-${i}`} persona={p} index={i} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {personas.length > 0 && (
+                <section>
+                  <PanelBriefing personas={personas} />
+                </section>
+              )}
+
+              {history.length > 0 && (
+                <section>
+                  <DebateThread
+                    history={history}
+                    personas={personas}
+                    typingIndex={typingIndex}
+                    currentRound={currentRound}
+                    totalRounds={TOTAL_ROUNDS}
+                  />
+                </section>
+              )}
+
+              {summary && (
+                <section>
+                  <SummaryPanel summary={summary} verdict={verdict} debateId={currentDebateId} />
+                </section>
+              )}
+
+              {phase === 'done' && (savedPath || currentDebateId) && (
+                <div style={styles.completionNote}>
+                  Debate archived &middot; {new Date().toLocaleDateString('en-GB', {
+                    day: 'numeric', month: 'long', year: 'numeric',
+                  })}
+                </div>
+              )}
+
+              {phase === 'done' && (
+                <div style={styles.shareActions}>
+                  <button
+                    type="button"
+                    onClick={handleShareLink}
+                    style={{
+                      ...styles.shareButton,
+                      opacity: shareUrl ? 1 : 0.5,
+                      cursor: shareUrl ? 'pointer' : 'not-allowed',
+                    }}
+                    disabled={!shareUrl}
+                  >
+                    Copy Share Link
+                  </button>
                 </div>
               </section>
             )}
