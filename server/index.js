@@ -56,6 +56,9 @@ const personaLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Apply rate limiting specifically to persona generation
+app.use('/api/generate-personas', personaLimiter);
+
 // Mount route handlers
 app.use('/api', personasRouter);
 app.use('/api', debateRouter);
@@ -64,9 +67,6 @@ app.use('/api', obsidianRouter);
 app.use('/api', debatesRouter);
 app.use('/api', storageRouter);
 app.use('/api', suggestionsRouter);
-
-// Apply rate limiting specifically to persona generation
-app.use('/api/generate-personas', personaLimiter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

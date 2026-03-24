@@ -15,7 +15,9 @@ function resolveVaultRoot() {
   }
 
   // Scan Desktop for an .obsidian directory as fallback
-  const desktop = 'C:/Users/ngmat/OneDrive/Desktop';
+  const desktop = process.platform === 'win32'
+    ? path.join(process.env.USERPROFILE || '', 'Desktop')
+    : path.join(process.env.HOME || '', 'Desktop');
   try {
     const entries = fs.readdirSync(desktop, { withFileTypes: true });
     for (const entry of entries) {
