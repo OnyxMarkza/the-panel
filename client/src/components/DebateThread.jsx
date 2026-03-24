@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { PERSONA_COLOURS } from '../utils/personaColors.js';
 
 /**
  * DebateThread — Scrolling transcript of the debate.
@@ -8,14 +9,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
  * Entries animate in with staggered 60ms delays.
  * The thread auto-scrolls to the latest message.
  */
-
-const PERSONA_COLOURS = [
-  'var(--persona-0)',
-  'var(--persona-1)',
-  'var(--persona-2)',
-  'var(--persona-3)',
-  'var(--persona-4)',
-];
 
 /**
  * TypewriterMessage — Renders a single message with a typewriter effect.

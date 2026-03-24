@@ -16,6 +16,8 @@ const TOTAL_ROUNDS = 3;
 function DebateHome() {
   // --- Core debate state ---
   const [topic, setTopic] = useState('');
+  const [topic, setTopic]     = useState('');
+  const [personaCount, setPersonaCount] = useState(5);
   const [personas, setPersonas] = useState([]);
   const [history, setHistory] = useState([]);
   const [summary, setSummary] = useState('');
@@ -36,6 +38,7 @@ function DebateHome() {
   // --- Debate history (current session only, shown in sidebar) ---
   const [debates, setDebates] = useState([]);
   const [currentDebateId, setCurrentDebateId] = useState(null);
+  const [shareUrl, setShareUrl] = useState('');
 
   // Load debates from localStorage on mount
   useEffect(() => {
@@ -47,6 +50,15 @@ function DebateHome() {
       } catch (err) {
         console.warn('Failed to parse saved debates from localStorage:', err);
       }
+    }
+  }, []);
+
+  // Route-level flow sanity: support "/" and "/debate/:id" directly.
+  useEffect(() => {
+    const path = window.location.pathname;
+    const debatePathMatch = path.match(/^\/debate\/(.+)$/);
+    if (debatePathMatch) {
+      setCurrentDebateId(debatePathMatch[1]);
     }
   }, []);
 
@@ -73,6 +85,7 @@ function DebateHome() {
 
   function handleNewDebate() {
     setTopic('');
+    setPersonaCount(5);
     setPersonas([]);
     setHistory([]);
     setSummary('');
@@ -83,9 +96,21 @@ function DebateHome() {
     setTypingIndex(-1);
     setCurrentRound(0);
     setPhase('input');
+    setCurrentDebateId(null);
+    setShareUrl('');
+    if (window.location.pathname !== '/') {
+      window.history.replaceState({}, '', '/');
+    }
   }
 
+  /**
+   * Main orchestration function — called when the user submits a topic.
+   * Each step is sequential: we await each API call before moving on.
+   */
+  async function handleTopicSubmit(submittedTopic, submittedPersonaCount = 5) {
+    setPersonaCount(submittedPersonaCount);
   async function handleTopicSubmit(submittedTopic) {
+    let savedDebateId = null;
     setTopic(submittedTopic);
     setPhase('personas');
 
@@ -97,7 +122,7 @@ function DebateHome() {
       const res = await fetch('/api/generate-personas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: submittedTopic }),
+        body: JSON.stringify({ topic: submittedTopic, count: submittedPersonaCount }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.message);
@@ -200,6 +225,8 @@ function DebateHome() {
     }
 
     setStatus('Saving debate to database...');
+    // -- Step 4: Save to configured storage backend --
+    setStatus('Saving debate transcript...');
 
     try {
       const res = await fetch('/api/save-to-database', {
@@ -229,6 +256,33 @@ function DebateHome() {
 
       if (errorMessage.includes('api key') || errorMessage.includes('unauthorized')) {
         userFriendlyMessage = 'Authentication failed. Please check your save settings.';
+      const returnedDebateId = data.id || null;
+      const returnedPath = data.path || '';
+      savedDebateId = returnedDebateId;
+
+      setSavedPath(returnedPath);
+      setCurrentDebateId(returnedDebateId);
+
+      if (returnedDebateId) {
+        const generatedShareUrl = `${window.location.origin}/debate/${returnedDebateId}`;
+        setShareUrl(generatedShareUrl);
+        window.history.replaceState({}, '', `/debate/${returnedDebateId}`);
+        setStatus('Debate saved and share link generated.');
+      } else if (returnedPath) {
+        setStatus(`Saved locally: ${returnedPath.split('/').pop()}`);
+      } else if (data.success) {
+        setStatus('Debate save completed.');
+      } else {
+        setStatus('Debate save failed; transcript remains available locally.');
+      }
+    } catch (err) {
+      const errorMessage = err.message.toLowerCase();
+      let userFriendlyMessage = 'Could not save debate. The transcript is still available in your browser.';
+
+      if (errorMessage.includes('api key') || errorMessage.includes('unauthorized')) {
+        userFriendlyMessage = 'Authentication failed. Please check your save settings.';
+      } else if (errorMessage.includes('vault') || errorMessage.includes('obsidian')) {
+        userFriendlyMessage = 'Local vault save failed. Please check your local save settings.';
       }
 
       setStatus(`Save issue: ${userFriendlyMessage}`);
@@ -238,9 +292,24 @@ function DebateHome() {
     setPhase('done');
 
     const newDebate = { id: Date.now(), topic: submittedTopic, date: new Date() };
+    // Register this debate in the sidebar history
+    const newDebate = { id: savedDebateId || Date.now(), topic: submittedTopic, date: new Date() };
     setDebates(prev => [...prev, newDebate]);
     setCurrentDebateId(newDebate.id);
   }
+
+  function handleShareLink() {
+    if (!currentDebateId || !shareUrl) {
+      setStatus('Share link unavailable until a database debate ID is assigned.');
+      return;
+    }
+
+    navigator.clipboard.writeText(shareUrl)
+      .then(() => setStatus('Share link copied to clipboard.'))
+      .catch(() => setStatus(`Share link: ${shareUrl}`));
+  }
+
+  // --- Render ---
 
   return (
     <div className="app">
@@ -273,7 +342,9 @@ function DebateHome() {
 
               {personas.length > 0 && (
                 <section>
-                  <h3 style={styles.sectionHeading}>The Panellists</h3>
+                  <h3 style={styles.sectionHeading}>
+                    The Panellists ({personas.length || personaCount})
+                  </h3>
                   <div style={styles.personaGrid}>
                     {personas.map((p, i) => (
                       <PersonaCard key={p.name} persona={p} index={i} />
@@ -311,6 +382,18 @@ function DebateHome() {
                   Debate archived &middot; {new Date().toLocaleDateString('en-GB', {
                     day: 'numeric', month: 'long', year: 'numeric',
                   })}
+                </div>
+              )}
+
+              {phase === 'done' && (
+                <div style={styles.shareActions}>
+                  <button
+                    type="button"
+                    onClick={handleShareLink}
+                    style={styles.shareButton}
+                  >
+                    Copy Share Link
+                  </button>
                 </div>
               )}
             </div>
@@ -380,5 +463,21 @@ const styles = {
     paddingTop: 'var(--spacing-md)',
     borderTop: '1px solid var(--border)',
     animation: 'fadeIn 0.6s var(--ease-out)',
+  },
+  shareActions: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginTop: 'var(--spacing-sm)',
+  },
+  shareButton: {
+    background: 'transparent',
+    border: '1px solid var(--gold)',
+    color: 'var(--gold)',
+    padding: '0.45rem 0.85rem',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.7rem',
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
   },
 };
