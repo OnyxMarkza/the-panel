@@ -22,6 +22,10 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
  * @returns {Promise<string>}
  */
 export async function callGroq(messages, maxTokens = 1024, timeoutMs = 30000) {
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY is not configured on the server.');
+  }
+
   // Note: the Groq SDK (v0.8) does not support AbortController's `signal`
   // property directly. Instead we use a simple timeout via Promise.race.
   const completionPromise = groq.chat.completions.create({

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PERSONA_ACCENT_RGB } from '../utils/personaColors.js';
 
 /**
  * PersonaCard — Displays a single panellist as a dossier entry.
@@ -19,7 +20,7 @@ export default function PersonaCard({ persona, index }) {
   const accentVar = `var(--persona-${index})`;
 
   // Subtle background tint using the persona's RGB values
-  const accentRgb = ACCENT_RGB[index] ?? '212,168,83';
+  const accentRgb = PERSONA_ACCENT_RGB[index] ?? '212,168,83';
 
   // Generate styled initials from the persona's name
   const initials = persona.name
@@ -85,15 +86,6 @@ export default function PersonaCard({ persona, index }) {
     </div>
   );
 }
-
-// RGB values matching the --persona-N CSS variables, used for rgba() tints
-const ACCENT_RGB = [
-  '226,179,64',   // amber   (--persona-0)
-  '78,205,196',   // teal    (--persona-1)
-  '255,107,107',  // coral   (--persona-2)
-  '116,185,255',  // sky     (--persona-3)
-  '168,224,108',  // lime    (--persona-4)
-];
 
 const styles = {
   card: {

@@ -23,6 +23,10 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
  * @returns {Promise<string>}
  */
 export async function callGroq(messages, maxTokens = 1024, timeoutMs = 30000) {
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY is not configured.');
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 

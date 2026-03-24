@@ -15,7 +15,9 @@ function resolveVaultRoot() {
   }
 
   // Scan Desktop for an .obsidian directory as fallback
-  const desktop = 'C:/Users/ngmat/OneDrive/Desktop';
+  const desktop = process.platform === 'win32'
+    ? path.join(process.env.USERPROFILE || '', 'Desktop')
+    : path.join(process.env.HOME || '', 'Desktop');
   try {
     const entries = fs.readdirSync(desktop, { withFileTypes: true });
     for (const entry of entries) {
@@ -34,17 +36,23 @@ function resolveVaultRoot() {
   throw new Error('Could not locate Obsidian vault. Set VAULT_ROOT in .env');
 }
 
-const VAULT_ROOT = resolveVaultRoot();
-
 // Configurable folder structure for debates (defaults to original structure)
 const DEBATES_FOLDER_1 = process.env.DEBATES_FOLDER_1 || 'Claude Projects';
 const DEBATES_FOLDER_2 = process.env.DEBATES_FOLDER_2 || 'the-panel';
 const DEBATES_FOLDER_3 = process.env.DEBATES_FOLDER_3 || 'debates';
 
-const DEBATES_DIR = path.join(VAULT_ROOT, DEBATES_FOLDER_1, DEBATES_FOLDER_2, DEBATES_FOLDER_3);
+// Resolved lazily on first write to avoid crashing the server at startup
+// when no local vault is configured (e.g. cloud-only deployments).
+let _debatesDir = null;
 
-// Ensure the debates directory exists
-fs.mkdirSync(DEBATES_DIR, { recursive: true });
+function getDebatesDir() {
+  if (!_debatesDir) {
+    const vaultRoot = resolveVaultRoot();
+    _debatesDir = path.join(vaultRoot, DEBATES_FOLDER_1, DEBATES_FOLDER_2, DEBATES_FOLDER_3);
+    fs.mkdirSync(_debatesDir, { recursive: true });
+  }
+  return _debatesDir;
+}
 
 /**
  * Convert a topic string into a URL-friendly slug.
@@ -74,7 +82,7 @@ export function writeDebate({ topic, personas, history, summary, verdict }) {
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const slug = slugify(topic);
   const filename = `${today}-${slug}.md`;
-  const filepath = path.join(DEBATES_DIR, filename);
+  const filepath = path.join(getDebatesDir(), filename);
 
   const personaList = personas
     .map(p => `- **${p.name}** — *${p.archetype}* | Bias: ${p.bias} | Tone: ${p.tone}`)
