@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import React, { useEffect, useState } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import Sidebar from './components/Sidebar.jsx';
@@ -15,24 +14,14 @@ import SharedDebateView from './components/SharedDebateView.jsx';
 const TOTAL_ROUNDS = 3;
 const DEFAULT_PERSONA_COUNT = 5;
 
-export default function App() {
-  const [topic, setTopic] = useState('');
 function DebateHome() {
   // --- Core debate state ---
   const [topic, setTopic] = useState('');
-  const [topic, setTopic]     = useState('');
-  const [personaCount, setPersonaCount] = useState(5);
+  const [personaCount, setPersonaCount] = useState(DEFAULT_PERSONA_COUNT);
   const [personas, setPersonas] = useState([]);
   const [history, setHistory] = useState([]);
   const [summary, setSummary] = useState('');
   const [verdict, setVerdict] = useState('');
-  const [personaCount, setPersonaCount] = useState(DEFAULT_PERSONA_COUNT);
-
-  const [status, setStatus] = useState('');
-  const [isActive, setIsActive] = useState(false);
-  const [phase, setPhase] = useState('input');
-  const [typingIndex, setTypingIndex] = useState(-1);
-  const [savedPath, setSavedPath] = useState('');
 
   // --- UI state ---
   const [status, setStatus] = useState('');
@@ -72,11 +61,12 @@ function DebateHome() {
   useEffect(() => {
     localStorage.setItem('the-panel-debates', JSON.stringify(debates));
   }, [debates]);
+
   useEffect(() => () => {
     mountedRef.current = false;
   }, []);
 
-  // Route-level flow sanity: support "/" and "/debate/:id" directly.
+  // Route-level flow: support "/debate/:id" loaded directly.
   useEffect(() => {
     const path = window.location.pathname;
     const debatePathMatch = path.match(/^\/debate\/(.+)$/);
@@ -84,7 +74,6 @@ function DebateHome() {
       const routedDebateId = debatePathMatch[1];
       setCurrentDebateId(routedDebateId);
       loadDebateById(routedDebateId);
-      setCurrentDebateId(debatePathMatch[1]);
     }
   }, []);
 
@@ -98,7 +87,6 @@ function DebateHome() {
 
       if ((event.ctrlKey || event.metaKey) && event.key === 's' && phase === 'done') {
         event.preventDefault();
-        if (!savedPath) {
         if (!savedPath && !debateId) {
           setStatus('Save functionality would be triggered here (Ctrl+S)');
         }
@@ -119,7 +107,7 @@ function DebateHome() {
     requestIdRef.current += 1; // invalidate stale async work
     inFlightRef.current = false;
     setTopic('');
-    setPersonaCount(5);
+    setPersonaCount(DEFAULT_PERSONA_COUNT);
     setPersonas([]);
     setHistory([]);
     setSummary('');
@@ -131,16 +119,41 @@ function DebateHome() {
     setCurrentRound(0);
     setPhase('input');
     setIsActive(false);
-    setPersonaCount(DEFAULT_PERSONA_COUNT);
-  }
-
-  async function requestJson(url, payload, fallbackMessage) {
-    let response;
     setCurrentDebateId(null);
     setShareUrl('');
     if (window.location.pathname !== '/') {
       window.history.replaceState({}, '', '/');
     }
+  }
+
+  async function requestJson(url, payload, fallbackMessage) {
+    let response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new Error(fallbackMessage);
+    }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error(fallbackMessage);
+    }
+
+    if (!response.ok || data.error) {
+      throw new Error(data?.message || fallbackMessage);
+    }
+
+    if (!data || typeof data !== 'object') {
+      throw new Error(fallbackMessage);
+    }
+
+    return data;
   }
 
   async function loadDebateById(debateId) {
@@ -195,46 +208,6 @@ function DebateHome() {
    * Main orchestration function — called when the user submits a topic.
    * Each step is sequential: we await each API call before moving on.
    */
-  async function handleTopicSubmit(submittedTopic, submittedPersonaCount = 5) {
-    setPersonaCount(submittedPersonaCount);
-  async function handleTopicSubmit(submittedTopic) {
-    let savedDebateId = null;
-    setTopic(submittedTopic);
-    setPhase('personas');
-
-    setStatus('Assembling the panel...');
-    setIsActive(true);
-
-    let generatedPersonas;
-    try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        body: JSON.stringify({ topic: submittedTopic, count: submittedPersonaCount }),
-      });
-    } catch {
-      throw new Error(fallbackMessage);
-    }
-
-    let data;
-    try {
-      data = await response.json();
-    } catch {
-      throw new Error(fallbackMessage);
-    }
-
-    if (!response.ok || data.error) {
-      throw new Error(data?.message || fallbackMessage);
-    }
-
-    if (!data || typeof data !== 'object') {
-      throw new Error(fallbackMessage);
-    }
-
-    return data;
-  }
-
   async function handleTopicSubmit(submittedTopic, submittedCount = DEFAULT_PERSONA_COUNT) {
     if (inFlightRef.current) return;
 
@@ -283,7 +256,6 @@ function DebateHome() {
     if (requestId !== requestIdRef.current || !mountedRef.current) return;
 
     safeSet(setPhase, 'debate', requestId);
-    setPhase('debate');
     let currentHistory = [];
 
     for (let round = 1; round <= TOTAL_ROUNDS; round++) {
@@ -310,22 +282,10 @@ function DebateHome() {
 
           const msg = roundHistory[i]?.content;
           await delay(typeof msg === 'string' ? msg.length * 12 + 400 : 700);
-          }),
-        });
-        const data = await res.json();
-        if (data.error) throw new Error(data.message);
-
-        for (let i = currentHistory.length; i < data.history.length; i++) {
-          setTypingIndex(i);
-          setHistory([...data.history.slice(0, i + 1)]);
-          await delay(data.history[i].content.length * 12 + 400);
         }
 
         currentHistory = roundHistory;
       } catch (err) {
-        safeSet(setStatus, `Round ${round} issue: ${err.message}`, requestId);
-        safeSet(setIsActive, false, requestId);
-        inFlightRef.current = false;
         const errorMessage = err.message.toLowerCase();
         let userFriendlyMessage = 'Debate round failed. The discussion may be incomplete.';
 
@@ -336,8 +296,9 @@ function DebateHome() {
           await delay(5000);
         }
 
-        setStatus(`Round ${round} issue: ${userFriendlyMessage}`);
-        setIsActive(false);
+        safeSet(setStatus, `Round ${round} issue: ${userFriendlyMessage}`, requestId);
+        safeSet(setIsActive, false, requestId);
+        inFlightRef.current = false;
         return;
       }
     }
@@ -345,10 +306,6 @@ function DebateHome() {
     safeSet(setTypingIndex, -1, requestId);
     safeSet(setStatus, 'Moderator is synthesising the debate...', requestId);
     safeSet(setPhase, 'summary', requestId);
-    setTypingIndex(-1);
-
-    setStatus('Moderator is synthesising the debate...');
-    setPhase('summary');
 
     let debateSummary;
     let debateVerdict;
@@ -370,10 +327,7 @@ function DebateHome() {
       return;
     }
 
-    safeSet(setStatus, 'Writing debate to Obsidian vault...', requestId);
-    setStatus('Saving debate to database...');
-    // -- Step 4: Save to configured storage backend --
-    setStatus('Saving debate transcript...');
+    safeSet(setStatus, 'Saving debate transcript...', requestId);
 
     try {
       const res = await fetch('/api/save-to-database', {
@@ -393,68 +347,25 @@ function DebateHome() {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) throw new Error(data?.message || 'Could not save to Obsidian.');
-      const safePath = typeof data.path === 'string' ? data.path : '';
+      if (!res.ok || data.error) throw new Error(data?.message || 'Could not save debate.');
 
-      safeSet(setSavedPath, safePath, requestId);
-      safeSet(setStatus, safePath ? `Saved to Obsidian: ${safePath.split('/').pop()}` : 'Saved to Obsidian.', requestId);
-    } catch (err) {
-      safeSet(setStatus, `Save issue: ${err.message}`, requestId);
-      const data = await res.json();
-      if (data.error || data.success === false) {
-        throw new Error(data.message || data.error || 'Storage save failed.');
-      }
       const returnedDebateId = data.id || null;
       const returnedPath = data.path || '';
-      savedDebateId = returnedDebateId;
 
-      setSavedPath(returnedPath);
-      setCurrentDebateId(returnedDebateId || null);
+      safeSet(setSavedPath, returnedPath, requestId);
+      safeSet(setCurrentDebateId, returnedDebateId, requestId);
 
       if (returnedDebateId) {
         const generatedShareUrl = `${window.location.origin}/debate/${returnedDebateId}`;
-        setShareUrl(generatedShareUrl);
+        safeSet(setShareUrl, generatedShareUrl, requestId);
         window.history.replaceState({}, '', `/debate/${returnedDebateId}`);
-        setStatus('Debate saved and share link generated.');
+        safeSet(setStatus, 'Debate saved and share link generated.', requestId);
       } else if (returnedPath) {
-        setStatus(`Saved locally: ${returnedPath.split('/').pop()}`);
+        safeSet(setStatus, `Saved locally: ${returnedPath.split('/').pop()}`, requestId);
       } else if (data.success) {
-        setStatus('Debate save completed.');
+        safeSet(setStatus, 'Debate save completed.', requestId);
       } else {
-        setStatus('Debate save failed; transcript remains available locally.');
-      }
-    } catch (err) {
-      const errorMessage = err.message.toLowerCase();
-      if (data.error) throw new Error(data.message);
-      setSavedPath(data.path ?? '');
-      setDebateId(data.debateId ?? '');
-      setStatus(data.debateId
-        ? 'Debate saved. You can now share it via link.'
-        : 'Debate saved successfully.');
-    } catch (err) {
-      const errorMessage = err.message.toLowerCase();
-      let userFriendlyMessage = 'Could not save debate. The debate is still available in your browser.';
-
-      if (errorMessage.includes('api key') || errorMessage.includes('unauthorized')) {
-        userFriendlyMessage = 'Authentication failed. Please check your save settings.';
-      const returnedDebateId = data.id || null;
-      const returnedPath = data.path || '';
-      savedDebateId = returnedDebateId;
-
-      setSavedPath(returnedPath);
-      setCurrentDebateId(returnedDebateId);
-
-      if (returnedDebateId) {
-        const generatedShareUrl = `${window.location.origin}/debate/${returnedDebateId}`;
-        setShareUrl(generatedShareUrl);
-        window.history.replaceState({}, '', `/debate/${returnedDebateId}`);
-        setStatus('Debate saved and share link generated.');
-      } else if (returnedPath) {
-        setStatus(`Saved locally: ${returnedPath.split('/').pop()}`);
-      } else if (data.success) {
-        setStatus('Debate save completed.');
-      } else {
-        setStatus('Debate save failed; transcript remains available locally.');
+        safeSet(setStatus, 'Debate save failed; transcript remains available locally.', requestId);
       }
     } catch (err) {
       const errorMessage = err.message.toLowerCase();
@@ -466,7 +377,7 @@ function DebateHome() {
         userFriendlyMessage = 'Local vault save failed. Please check your local save settings.';
       }
 
-      setStatus(`Save issue: ${userFriendlyMessage}`);
+      safeSet(setStatus, `Save issue: ${userFriendlyMessage}`, requestId);
     }
 
     safeSet(setIsActive, false, requestId);
@@ -482,12 +393,6 @@ function DebateHome() {
     () => debates.map((debate) => ({ ...debate, persona_count: debate.persona_count ?? DEFAULT_PERSONA_COUNT })),
     [debates],
   );
-    const newDebate = { id: Date.now(), topic: submittedTopic, date: new Date() };
-    // Register this debate in the sidebar history
-    const newDebate = { id: savedDebateId || Date.now(), topic: submittedTopic, date: new Date() };
-    setDebates(prev => [...prev, newDebate]);
-    setCurrentDebateId(newDebate.id);
-  }
 
   function handleShareLink() {
     if (!currentDebateId || !shareUrl) {
@@ -507,7 +412,6 @@ function DebateHome() {
       <Header
         onNewDebate={handleNewDebate}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
-        onToggleSidebar={() => setSidebarOpen(open => !open)}
         onOpenSettings={() => {}}
       />
 
@@ -523,7 +427,6 @@ function DebateHome() {
         <main className="main-content">
           {phase === 'input' ? (
             <TopicInput onSubmit={handleTopicSubmit} isLoading={isLoading} defaultPersonaCount={personaCount} />
-            <TopicInput onSubmit={handleTopicSubmit} isLoading={false} />
           ) : (
             <div className="debate-content">
               <StatusBar status={status} isActive={isActive} />
@@ -570,7 +473,6 @@ function DebateHome() {
                 </section>
               )}
 
-              {phase === 'done' && savedPath && (
               {phase === 'done' && (savedPath || debateId) && (
                 <div style={styles.completionNote}>
                   Debate archived &middot; {new Date().toLocaleDateString('en-GB', {
@@ -590,7 +492,6 @@ function DebateHome() {
                       cursor: shareUrl ? 'pointer' : 'not-allowed',
                     }}
                     disabled={!shareUrl}
-                    style={styles.shareButton}
                   >
                     Copy Share Link
                   </button>

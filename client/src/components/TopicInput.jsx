@@ -17,16 +17,14 @@ const FALLBACK_TOPICS = [
  */
 export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 5 }) {
   const [topic, setTopic] = useState('');
-  const [personaCount, setPersonaCount] = useState(5);
+  const [personaCount, setPersonaCount] = useState(defaultPersonaCount);
   const [focused, setFocused] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const [personaCount, setPersonaCount] = useState(defaultPersonaCount);
-
-  const MAX_TOPIC_LENGTH = 100;
-  const PERSONA_COUNT_OPTIONS = [3, 4, 5, 6, 7];
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsError, setSuggestionsError] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
+
+  const PERSONA_COUNT_OPTIONS = [3, 4, 5, 6, 7];
 
   function handleTopicChange(e) {
     const value = e.target.value;
@@ -38,20 +36,10 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
   function handleSubmit(e) {
     e.preventDefault();
     const normalizedTopic = topic.trim();
-    if (normalizedTopic) {
-      onSubmit(normalizedTopic);
     const safeCount = Number.isInteger(personaCount) ? personaCount : defaultPersonaCount;
 
     if (normalizedTopic && !isLoading) {
       onSubmit(normalizedTopic, safeCount);
-    }
-  }
-
-    if (topic.trim()) {
-      onSubmit(topic.trim(), personaCount);
-    const normalizedTopic = topic.trim();
-    if (normalizedTopic) {
-      onSubmit(normalizedTopic);
     }
   }
 
@@ -84,7 +72,6 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
     }
   }
 
-  // Conflict resolution note: keep a single source of truth for submit disabled state.
   const isDisabled = isLoading || !topic.trim();
   const charCount = topic.length;
   const isNearLimit = charCount > 80;
@@ -139,21 +126,6 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
           </div>
         </div>
 
-        <label style={styles.selectLabel} htmlFor="persona-count-select">
-          Panel size
-        </label>
-        <select
-          id="persona-count-select"
-          value={personaCount}
-          onChange={(e) => setPersonaCount(Number(e.target.value))}
-          disabled={isLoading}
-          aria-label="Select panel size"
-          style={styles.select}
-        >
-          {PERSONA_COUNT_OPTIONS.map((countOption) => (
-            <option key={countOption} value={countOption}>{countOption} panellists</option>
-          ))}
-        </select>
         <div style={styles.rangeWrapper}>
           <div style={styles.rangeLabelRow}>
             <span style={styles.rangeLabel}>Panel size</span>
@@ -176,25 +148,6 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={isDisabled}
-          aria-disabled={isDisabled}
-          aria-label={isLoading ? 'Convene panel in progress' : 'Convene the panel'}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          style={{
-            ...styles.button,
-            opacity: isDisabled ? 0.4 : 1,
-            cursor: isDisabled ? 'not-allowed' : 'pointer',
-            transform: hovered && !isDisabled ? 'translateY(-2px)' : 'translateY(0)',
-            boxShadow: hovered && !isDisabled
-              ? '0 6px 24px rgba(226, 179, 64, 0.35)'
-              : '0 2px 10px rgba(226, 179, 64, 0.12)',
-          }}
-        >
-          {isLoading ? 'Convening the panel...' : 'Convene the Panel →'}
-        </button>
         <div style={styles.actionsRow}>
           <button
             type="button"
@@ -212,6 +165,8 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
           <button
             type="submit"
             disabled={isDisabled}
+            aria-disabled={isDisabled}
+            aria-label={isLoading ? 'Convene panel in progress' : 'Convene the panel'}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             style={{
@@ -408,24 +363,6 @@ const styles = {
     fontWeight: '500',
     transition: 'color 0.2s var(--ease-out)',
   },
-  selectLabel: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.58rem',
-    letterSpacing: '0.2em',
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    alignSelf: 'flex-start',
-    marginTop: '0.25rem',
-  },
-  select: {
-    height: '40px',
-    background: 'var(--bg-card)',
-    color: 'var(--text-primary)',
-    border: '1px solid var(--border)',
-    borderRadius: '3px',
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.8rem',
-    padding: '0 0.75rem',
   rangeWrapper: {
     display: 'flex',
     flexDirection: 'column',
@@ -463,6 +400,7 @@ const styles = {
     color: 'var(--text-muted)',
     opacity: 0.75,
     letterSpacing: '0.08em',
+  },
   actionsRow: {
     display: 'flex',
     justifyContent: 'space-between',

@@ -10,27 +10,13 @@ const PERSONA_COLOURS = [
   'var(--persona-6)',
 ];
 
-const TypewriterMessage = memo(function TypewriterMessage({ content, colour, isNew }) {
-  const safeContent = typeof content === 'string' ? content : '';
-  const [displayed, setDisplayed] = useState(isNew ? '' : safeContent);
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PERSONA_COLOURS } from '../utils/personaColors.js';
-
-/**
- * DebateThread — Scrolling transcript of the debate.
- *
- * Each message is attributed to a persona with their unique accent colour.
- * New messages appear with a typewriter effect (character by character).
- * Entries animate in with staggered 60ms delays.
- * The thread auto-scrolls to the latest message.
- */
-
 /**
  * TypewriterMessage — Renders a single message with a typewriter effect.
  * Pre-existing messages (isNew = false) display immediately.
  */
-function TypewriterMessage({ content, colour, isNew }) {
-  const [displayed, setDisplayed] = useState(isNew ? '' : content);
+const TypewriterMessage = memo(function TypewriterMessage({ content, colour, isNew }) {
+  const safeContent = typeof content === 'string' ? content : '';
+  const [displayed, setDisplayed] = useState(isNew ? '' : safeContent);
 
   useEffect(() => {
     if (!isNew) {
@@ -58,6 +44,14 @@ function TypewriterMessage({ content, colour, isNew }) {
   );
 });
 
+/**
+ * DebateThread — Scrolling transcript of the debate.
+ *
+ * Each message is attributed to a persona with their unique accent colour.
+ * New messages appear with a typewriter effect (character by character).
+ * Entries animate in with staggered 60ms delays.
+ * The thread auto-scrolls to the latest message.
+ */
 function DebateThread({ history, personas, typingIndex, currentRound, totalRounds }) {
   const bottomRef = useRef(null);
 
