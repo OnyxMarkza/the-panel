@@ -1,20 +1,24 @@
 import React, { useState } from 'react';
 
+const MAX_TOPIC_LENGTH = 100;
+const FALLBACK_TOPICS = [
+  'Should social media platforms verify all users by default?',
+  'Should AI-generated media require visible watermarking?',
+  'Should cities make public transit free for all residents?',
+  'Should universities ban laptops in lecture halls?',
+  'Should governments cap weekly work at four days?',
+];
+
 /**
  * TopicInput — The opening screen within the main content area.
- *
- * Aesthetic: modern debate chamber. An SVG crest, large Inter
- * logotype, decorative ornament, clean sans-serif input,
- * and an uppercase mono CTA.
- *
- * On submit, calls the parent's onSubmit handler with the topic string.
  */
 export default function TopicInput({ onSubmit, isLoading }) {
   const [topic, setTopic] = useState('');
   const [focused, setFocused] = useState(false);
   const [hovered, setHovered] = useState(false);
-
-  const MAX_TOPIC_LENGTH = 100;
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsError, setSuggestionsError] = useState('');
+  const [isSuggesting, setIsSuggesting] = useState(false);
 
   function handleTopicChange(e) {
     const value = e.target.value;
@@ -30,19 +34,45 @@ export default function TopicInput({ onSubmit, isLoading }) {
     }
   }
 
-  // Single declaration — was duplicated in the original (bug fix)
+  async function handleSurpriseMe() {
+    if (isSuggesting) return;
+
+    setIsSuggesting(true);
+    setSuggestionsError('');
+    setSuggestions([]);
+
+    try {
+      const res = await fetch('/api/suggest-topics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seed: topic.trim() || undefined }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error || !Array.isArray(data.topics)) {
+        throw new Error(data.message || 'Unable to load suggestions right now.');
+      }
+
+      setSuggestions(data.topics.slice(0, 5));
+    } catch (err) {
+      setSuggestions(FALLBACK_TOPICS);
+      setSuggestionsError('Could not fetch live suggestions. Here are a few debate starters instead.');
+      console.error('[TopicInput] suggest-topics failed:', err.message);
+    } finally {
+      setIsSuggesting(false);
+    }
+  }
+
   const isDisabled = isLoading || !topic.trim();
   const charCount = topic.length;
   const isNearLimit = charCount > 80;
 
   return (
     <div style={styles.wrapper}>
-      {/* Decorative crest */}
       <div style={styles.crest} aria-hidden="true">
         <CrestSVG />
       </div>
 
-      {/* Masthead */}
       <div style={styles.masthead}>
         <div style={styles.eyebrow}>Est. In Dispute</div>
         <h1 style={styles.title}>The Panel</h1>
@@ -55,7 +85,6 @@ export default function TopicInput({ onSubmit, isLoading }) {
       <form onSubmit={handleSubmit} style={styles.form}>
         <div style={styles.inputLabel}>State your proposition</div>
 
-        {/* Input wrapper — border turns gold on focus */}
         <div
           style={{
             ...styles.inputWrapper,
@@ -77,7 +106,6 @@ export default function TopicInput({ onSubmit, isLoading }) {
             maxLength={MAX_TOPIC_LENGTH}
             aria-label="Debate topic"
           />
-          {/* Character counter */}
           <div
             style={{
               ...styles.charCounter,
@@ -88,26 +116,76 @@ export default function TopicInput({ onSubmit, isLoading }) {
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={isDisabled}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          style={{
-            ...styles.button,
-            opacity:   isDisabled ? 0.4 : 1,
-            cursor:    isDisabled ? 'not-allowed' : 'pointer',
-            transform: hovered && !isDisabled ? 'translateY(-2px)' : 'translateY(0)',
-            boxShadow: hovered && !isDisabled
-              ? '0 6px 24px rgba(226, 179, 64, 0.35)'
-              : '0 2px 10px rgba(226, 179, 64, 0.12)',
-          }}
-        >
-          {isLoading ? 'Convening the panel...' : 'Convene the Panel \u2192'}
-        </button>
+        <div style={styles.actionsRow}>
+          <button
+            type="button"
+            disabled={isLoading || isSuggesting}
+            onClick={handleSurpriseMe}
+            style={{
+              ...styles.ghostButton,
+              opacity: isLoading || isSuggesting ? 0.55 : 1,
+              cursor: isLoading || isSuggesting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isSuggesting ? 'Finding ideas...' : 'Surprise Me'}
+          </button>
+
+          <button
+            type="submit"
+            disabled={isDisabled}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+              ...styles.button,
+              opacity: isDisabled ? 0.4 : 1,
+              cursor: isDisabled ? 'not-allowed' : 'pointer',
+              transform: hovered && !isDisabled ? 'translateY(-2px)' : 'translateY(0)',
+              boxShadow: hovered && !isDisabled
+                ? '0 6px 24px rgba(226, 179, 64, 0.35)'
+                : '0 2px 10px rgba(226, 179, 64, 0.12)',
+            }}
+          >
+            {isLoading ? 'Convening the panel...' : 'Convene the Panel \u2192'}
+          </button>
+        </div>
       </form>
 
-      {/* Attribution line */}
+      {(isSuggesting || suggestions.length > 0 || suggestionsError) && (
+        <section style={styles.suggestionsPanel} aria-live="polite">
+          <div style={styles.suggestionsHeader}>Topic ideas</div>
+
+          {isSuggesting && (
+            <div style={styles.skeletonGrid}>
+              {[0, 1, 2, 3, 4].map((item) => (
+                <div key={item} style={styles.skeletonCard} />
+              ))}
+            </div>
+          )}
+
+          {!isSuggesting && suggestionsError && (
+            <p style={styles.errorText}>{suggestionsError}</p>
+          )}
+
+          {!isSuggesting && suggestions.length > 0 && (
+            <div style={styles.chipsGrid}>
+              {suggestions.map((idea, idx) => (
+                <button
+                  key={idea}
+                  type="button"
+                  onClick={() => setTopic(idea)}
+                  style={{
+                    ...styles.chip,
+                    animationDelay: `${idx * 80}ms`,
+                  }}
+                >
+                  {idea}
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       <div style={styles.meta}>
         <span>Groq</span>
         <span style={styles.metaDot}>&middot;</span>
@@ -119,10 +197,6 @@ export default function TopicInput({ onSubmit, isLoading }) {
   );
 }
 
-/**
- * CrestSVG — Circular emblem with the "TP" monogram.
- * Two concentric rings + four cardinal tick marks.
- */
 function CrestSVG() {
   return (
     <svg
@@ -135,9 +209,9 @@ function CrestSVG() {
     >
       <circle cx="36" cy="36" r="34" stroke="var(--gold)" strokeWidth="0.75" opacity="0.45" />
       <circle cx="36" cy="36" r="28" stroke="var(--gold)" strokeWidth="0.5" opacity="0.25" />
-      <line x1="36" y1="2"  x2="36" y2="8"  stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
+      <line x1="36" y1="2" x2="36" y2="8" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
       <line x1="36" y1="64" x2="36" y2="70" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
-      <line x1="2"  y1="36" x2="8"  y2="36" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
+      <line x1="2" y1="36" x2="8" y2="36" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
       <line x1="64" y1="36" x2="70" y2="36" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
       <text
         x="36"
@@ -148,7 +222,9 @@ function CrestSVG() {
         fontSize="22"
         fill="var(--gold)"
         letterSpacing="4"
-      >TP</text>
+      >
+        TP
+      </text>
     </svg>
   );
 }
@@ -239,7 +315,6 @@ const styles = {
     outline: 'none',
     color: 'var(--text-primary)',
     fontFamily: "'Inter', sans-serif",
-
     fontSize: '1.15rem',
     lineHeight: '1.5',
     paddingRight: '64px',
@@ -254,6 +329,25 @@ const styles = {
     fontWeight: '500',
     transition: 'color 0.2s var(--ease-out)',
   },
+  actionsRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 'var(--spacing-xs)',
+    gap: 'var(--spacing-sm)',
+  },
+  ghostButton: {
+    background: 'transparent',
+    border: '1px solid var(--border)',
+    color: 'var(--text-secondary)',
+    borderRadius: '3px',
+    padding: '12px 14px',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.62rem',
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase',
+    transition: 'border-color 0.2s var(--ease-out), color 0.2s var(--ease-out)',
+  },
   button: {
     background: 'var(--gold)',
     color: '#1a1a1a',
@@ -265,10 +359,62 @@ const styles = {
     fontWeight: '500',
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
-    alignSelf: 'flex-end',
+    transition: 'opacity 0.2s var(--ease-out), transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out)',
+  },
+  suggestionsPanel: {
+    width: '100%',
+    maxWidth: '680px',
+    border: '1px solid var(--border)',
+    background: 'rgba(255,255,255,0.02)',
+    borderRadius: '4px',
+    padding: '14px',
     marginTop: 'var(--spacing-xs)',
-    transition:
-      'opacity 0.2s var(--ease-out), transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out)',
+  },
+  suggestionsHeader: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.58rem',
+    letterSpacing: '0.2em',
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    marginBottom: '12px',
+  },
+  skeletonGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '10px',
+  },
+  skeletonCard: {
+    height: '44px',
+    borderRadius: '999px',
+    background: 'linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.1), rgba(255,255,255,0.04))',
+    backgroundSize: '200% 100%',
+    animation: 'shimmer 1.2s linear infinite',
+  },
+  chipsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '10px',
+  },
+  chip: {
+    textAlign: 'left',
+    border: '1px solid rgba(226, 179, 64, 0.35)',
+    color: 'var(--text-secondary)',
+    background: 'rgba(226, 179, 64, 0.06)',
+    padding: '10px 12px',
+    borderRadius: '999px',
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '0.88rem',
+    lineHeight: '1.3',
+    cursor: 'pointer',
+    animation: 'fadeInUp 0.35s var(--ease-out) both',
+    transition: 'border-color 0.2s var(--ease-out), transform 0.2s var(--ease-out)',
+  },
+  errorText: {
+    margin: '2px 0 12px',
+    color: 'var(--text-muted)',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.7rem',
+    lineHeight: '1.5',
   },
   meta: {
     display: 'flex',
