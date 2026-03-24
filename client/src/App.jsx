@@ -33,6 +33,7 @@ function DebateHome() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [debates, setDebates] = useState([]);
   const [currentDebateId, setCurrentDebateId] = useState(null);
+  const [shareUrl, setShareUrl] = useState('');
 
   const mountedRef = useRef(true);
   const inFlightRef = useRef(false);
@@ -101,6 +102,11 @@ function DebateHome() {
     if (window.location.pathname !== '/') {
       window.history.replaceState({}, '', '/');
     }
+  }
+
+  function handleShareLink() {
+    if (!shareUrl) return;
+    navigator.clipboard.writeText(shareUrl).catch(() => {});
   }
 
   async function requestJson(url, payload, fallbackMessage) {
@@ -278,6 +284,9 @@ function DebateHome() {
     safeSet(setStatus, 'Moderator is synthesising the debate...', requestId);
     safeSet(setPhase, 'summary', requestId);
 
+    let debateSummary = '';
+    let debateVerdict = '';
+
     try {
       safeSet(setPhase, 'summary', requestId);
       safeSet(setStatus, 'Moderator is drafting the summary...', requestId);
@@ -387,7 +396,7 @@ function DebateHome() {
 
         <main className="main-content">
           {phase === 'input' ? (
-            <TopicInput onSubmit={handleTopicSubmit} isLoading={isLoading} defaultPersonaCount={personaCount} />
+            <TopicInput onSubmit={handleTopicSubmit} isLoading={isActive} defaultPersonaCount={personaCount} />
           ) : (
             <div className="debate-content">
               <StatusBar status={status} isActive={isActive} />
@@ -477,25 +486,58 @@ export default function App() {
   );
 }
 
-const sectionHeading = {
-  fontFamily: "'Inter', sans-serif",
-  fontSize: '0.85rem',
-  color: 'var(--gold)',
-  marginBottom: 'var(--spacing-md)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.1em',
-  fontWeight: '400',
-};
-
-const personaGrid = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-  gap: 'var(--spacing-sm)',
-};
-
-const savedPathText = {
-  marginTop: 'var(--spacing-sm)',
-  fontFamily: "'JetBrains Mono', monospace",
-  color: 'var(--text-muted)',
-  fontSize: '0.72rem',
+const styles = {
+  topicHeader: {
+    marginBottom: 'var(--spacing-lg)',
+  },
+  topicLabel: {
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '0.75rem',
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.1em',
+    marginBottom: 'var(--spacing-xs)',
+  },
+  topicText: {
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '1.4rem',
+    fontWeight: '600',
+    color: 'var(--text-primary)',
+    margin: 0,
+  },
+  sectionHeading: {
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '0.85rem',
+    color: 'var(--gold)',
+    marginBottom: 'var(--spacing-md)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.1em',
+    fontWeight: '400',
+  },
+  personaGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+    gap: 'var(--spacing-sm)',
+  },
+  completionNote: {
+    marginTop: 'var(--spacing-md)',
+    fontFamily: "'JetBrains Mono', monospace",
+    color: 'var(--text-muted)',
+    fontSize: '0.72rem',
+  },
+  shareActions: {
+    marginTop: 'var(--spacing-md)',
+    display: 'flex',
+    gap: 'var(--spacing-sm)',
+  },
+  shareButton: {
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '0.85rem',
+    padding: '0.5rem 1rem',
+    background: 'var(--gold)',
+    color: '#000',
+    border: 'none',
+    borderRadius: '4px',
+    fontWeight: '500',
+  },
 };
