@@ -23,6 +23,9 @@ const supabase = createClient(
  * Create a new debate row and return its generated UUID.
  *
  * @param {string} topic - The debate topic.
+ * @param {number} personaCount - Number of personas for this debate.
+ * @returns {Promise<string>} The new debate's UUID.
+ */
  * @param {number} [personaCount=5] - Number of personas used in the debate.
  * @returns {Promise<string>} The new debate's UUID.
  */

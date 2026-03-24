@@ -77,6 +77,47 @@ Each object must have:
   const userPrompt = `Generate ${personaCount} debate personas for this topic: "${topic}"`;
 
   try {
+    const maxAttempts = 2;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const raw = await callGroq([
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ], 2000);
+
+        // Extract JSON array from the response (handles wrapped output)
+        const jsonMatch = raw.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+          throw new Error('Model did not return a valid JSON array.');
+        }
+
+        const personas = JSON.parse(jsonMatch[0]);
+        if (!Array.isArray(personas) || personas.length !== 5) {
+          throw new Error('Expected exactly 5 personas.');
+        }
+
+        // Validate each persona object has required fields
+        for (let i = 0; i < personas.length; i++) {
+          const persona = personas[i];
+          if (!persona.name || !persona.archetype || !persona.bias || !persona.tone) {
+            throw new Error(`Persona ${i + 1} is missing required fields (name, archetype, bias, tone).`);
+          }
+          if (typeof persona.name !== 'string' || typeof persona.archetype !== 'string' ||
+              typeof persona.bias !== 'string' || typeof persona.tone !== 'string') {
+            throw new Error(`Persona ${i + 1} has invalid field types. All fields must be strings.`);
+          }
+        }
+
+        return res.json({ personas });
+      } catch (attemptError) {
+        lastError = attemptError;
+        console.warn(`[personas] Attempt ${attempt}/${maxAttempts} failed:`, attemptError.message);
+      }
+    }
+
+    throw lastError || new Error('Persona generation failed after retry.');
     const raw = await callGroq([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },

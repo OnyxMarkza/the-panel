@@ -38,6 +38,8 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
   function handleSubmit(e) {
     e.preventDefault();
     const normalizedTopic = topic.trim();
+    if (normalizedTopic) {
+      onSubmit(normalizedTopic);
     const safeCount = Number.isInteger(personaCount) ? personaCount : defaultPersonaCount;
 
     if (normalizedTopic && !isLoading) {
