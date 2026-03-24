@@ -18,7 +18,7 @@ import debateRouter from './routes/debate.js';
 import summariseRouter from './routes/summarise.js';
 import obsidianRouter from './routes/obsidian.js';
 import debatesRouter from './routes/debates.js';
-import storageRouter from './routes/storage.js';
+import suggestionsRouter from './routes/suggestions.js';
 
 const app = express();
 const PORT = 3001;
@@ -61,7 +61,7 @@ app.use('/api', debateRouter);
 app.use('/api', summariseRouter);
 app.use('/api', obsidianRouter);
 app.use('/api', debatesRouter);
-app.use('/api', storageRouter);
+app.use('/api', suggestionsRouter);
 
 // Apply rate limiting specifically to persona generation
 app.use('/api/generate-personas', personaLimiter);
