@@ -1,4 +1,6 @@
 import React, { memo, useMemo, useState } from 'react';
+import React, { useState } from 'react';
+import { PERSONA_COLOURS } from '../utils/personaColors.js';
 
 /**
  * PanelBriefing — A "dossier" summary shown before the debate begins.
@@ -20,6 +22,7 @@ const PERSONA_COLOURS = [
 ];
 
 function PanelBriefing({ personas }) {
+export default function PanelBriefing({ personas }) {
   const [expandedIndex, setExpandedIndex] = useState(null);
 
   // If personas don't have the new stance/relationships fields, don't render

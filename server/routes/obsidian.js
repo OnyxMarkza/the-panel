@@ -66,4 +66,48 @@ router.post('/save-to-obsidian', async (req, res) => {
   return res.json({ success: true, path: filePath, debateId, persona_count: personaCount });
 });
 
+
+/**
+ * POST /api/save-to-database
+ * Body: { topic, personas, history, summary, verdict }
+ * Returns: { success: true, debateId: string }
+ */
+router.post('/save-to-database', async (req, res) => {
+  const apiKey = req.headers['x-api-key'] || req.query.apiKey;
+  const expectedKey = process.env.SAVE_API_KEY;
+
+  if (expectedKey && apiKey !== expectedKey) {
+    return res.status(401).json({
+      error: true,
+      message: 'Invalid or missing API key.',
+    });
+  }
+
+  const { topic, personas, history, summary, verdict } = req.body;
+
+  if (!topic || !personas || !history || !summary) {
+    return res.status(400).json({
+      error: true,
+      message: 'topic, personas, history, and summary are all required.',
+    });
+  }
+
+  try {
+    const result = await saveDebateToSupabase({
+      topic,
+      personas,
+      history,
+      summary,
+      verdict,
+      obsidianPath: null,
+    });
+
+    return res.json({ success: true, debateId: result.id });
+  } catch (err) {
+    console.error('[database] Supabase save error:', err.message);
+    return res.status(500).json({ error: true, message: err.message });
+  }
+});
+
+
 export default router;
