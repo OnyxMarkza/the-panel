@@ -3,13 +3,13 @@
   "outputDirectory": "client/dist",
   "functions": {
     "api/**/*.js": {
-      "runtime": "nodejs20.x",
+      "runtime": "nodejs22.x",
       "maxDuration": 60
     }
   },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
