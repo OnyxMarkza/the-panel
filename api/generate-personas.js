@@ -40,24 +40,34 @@ Each object must have:
   const userPrompt = `Generate 5 debate personas for this topic: "${topic}"`;
 
   try {
-    const raw = await callGroq([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ], 800);
+    const maxAttempts = 2;
+    let lastError = null;
 
-    // Extract JSON array from the response (handles cases where the model wraps in backticks)
-    const jsonMatch = raw.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      throw new Error('Model did not return a valid JSON array.');
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const raw = await callGroq([
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ], 800);
+
+        const jsonMatch = raw.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+          throw new Error('Model did not return a valid JSON array.');
+        }
+
+        const personas = JSON.parse(jsonMatch[0]);
+        if (!Array.isArray(personas) || personas.length !== 5) {
+          throw new Error('Expected exactly 5 personas.');
+        }
+
+        return res.status(200).json({ personas });
+      } catch (attemptError) {
+        lastError = attemptError;
+        console.warn(`[api/generate-personas] Attempt ${attempt}/${maxAttempts} failed:`, attemptError.message);
+      }
     }
 
-    const personas = JSON.parse(jsonMatch[0]);
-
-    if (!Array.isArray(personas) || personas.length !== 5) {
-      throw new Error('Expected exactly 5 personas.');
-    }
-
-    return res.status(200).json({ personas });
+    throw lastError || new Error('Persona generation failed after retry.');
   } catch (err) {
     console.error('[api/generate-personas] Error:', err.message);
     return res.status(500).json({ error: true, message: err.message });

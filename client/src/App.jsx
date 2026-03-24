@@ -49,6 +49,7 @@ export default function App() {
   // --- Debate history (current session only, shown in sidebar) ---
   const [debates, setDebates]               = useState([]);
   const [currentDebateId, setCurrentDebateId] = useState(null);
+  const [shareUrl, setShareUrl] = useState('');
 
   // Load debates from localStorage on mount
   useEffect(() => {
@@ -60,6 +61,22 @@ export default function App() {
       } catch (err) {
         console.warn('Failed to parse saved debates from localStorage:', err);
       }
+    }
+  }, []);
+
+  // Keep local debate list persisted between sessions.
+  useEffect(() => {
+    localStorage.setItem('the-panel-debates', JSON.stringify(debates));
+  }, [debates]);
+
+  // Route-level flow sanity: support "/" and "/debate/:id" directly.
+  useEffect(() => {
+    const path = window.location.pathname;
+    const debatePathMatch = path.match(/^\/debate\/(.+)$/);
+    if (debatePathMatch) {
+      const routedDebateId = debatePathMatch[1];
+      setCurrentDebateId(routedDebateId);
+      loadDebateById(routedDebateId);
     }
   }, []);
 
@@ -101,6 +118,59 @@ export default function App() {
     setTypingIndex(-1);
     setCurrentRound(0);
     setPhase('input');
+    setCurrentDebateId(null);
+    setShareUrl('');
+    if (window.location.pathname !== '/') {
+      window.history.replaceState({}, '', '/');
+    }
+  }
+
+  async function loadDebateById(debateId) {
+    if (!debateId) return;
+
+    setStatus('Loading shared debate...');
+    setIsActive(true);
+
+    try {
+      const res = await fetch(`/api/debates/${debateId}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.message || 'Unable to load debate.');
+
+      const personaLookup = new Map((data.personas || []).map((p) => [p.id, p.name]));
+      const hydratedHistory = (data.messages || []).map((msg) => ({
+        persona: personaLookup.get(msg.persona_id) || 'Unknown Speaker',
+        content: msg.content,
+      }));
+
+      setTopic(data.topic || '');
+      setPersonas(data.personas || []);
+      setHistory(hydratedHistory);
+      setSummary(data.summary || '');
+      setVerdict(data.verdict || '');
+      setCurrentDebateId(data.id || debateId);
+      setShareUrl(`${window.location.origin}/debate/${data.id || debateId}`);
+      setPhase('done');
+      setStatus('Shared debate loaded.');
+    } catch (err) {
+      setStatus(`Could not load shared debate: ${err.message}`);
+      setPhase('input');
+    } finally {
+      setIsActive(false);
+    }
+  }
+
+  async function handleSelectDebate(debateId) {
+    setCurrentDebateId(debateId);
+    if (!debateId) return;
+
+    if (typeof debateId === 'string') {
+      window.history.replaceState({}, '', `/debate/${debateId}`);
+      await loadDebateById(debateId);
+      return;
+    }
+
+    // Local-only entries (numeric IDs) do not have a shareable backend record.
+    setShareUrl('');
   }
 
   /**
@@ -108,6 +178,7 @@ export default function App() {
    * Each step is sequential: we await each API call before moving on.
    */
   async function handleTopicSubmit(submittedTopic) {
+    let savedDebateId = null;
     setTopic(submittedTopic);
     setPhase('personas');
 
@@ -225,15 +296,14 @@ export default function App() {
       return;
     }
 
-    // -- Step 4: Save to Obsidian --
-    setStatus('Writing debate to Obsidian vault...');
+    // -- Step 4: Save to configured storage backend --
+    setStatus('Saving debate transcript...');
 
     try {
-      const res = await fetch('/api/save-to-obsidian', {
+      const res = await fetch('/api/save-to-database', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': import.meta.env.VITE_SAVE_API_KEY || 'default-key-for-dev'
         },
         body: JSON.stringify({
           topic: submittedTopic,
@@ -244,17 +314,36 @@ export default function App() {
         }),
       });
       const data = await res.json();
-      if (data.error) throw new Error(data.message);
-      setSavedPath(data.path);
-      setStatus(`Saved to Obsidian: ${data.path.split('/').pop()}`);
+      if (data.error || data.success === false) {
+        throw new Error(data.message || data.error || 'Storage save failed.');
+      }
+      const returnedDebateId = data.id || null;
+      const returnedPath = data.path || '';
+      savedDebateId = returnedDebateId;
+
+      setSavedPath(returnedPath);
+      setCurrentDebateId(returnedDebateId || null);
+
+      if (returnedDebateId) {
+        const generatedShareUrl = `${window.location.origin}/debate/${returnedDebateId}`;
+        setShareUrl(generatedShareUrl);
+        window.history.replaceState({}, '', `/debate/${returnedDebateId}`);
+        setStatus('Debate saved and share link generated.');
+      } else if (returnedPath) {
+        setStatus(`Saved locally: ${returnedPath.split('/').pop()}`);
+      } else if (data.success) {
+        setStatus('Debate save completed.');
+      } else {
+        setStatus('Debate save failed; transcript remains available locally.');
+      }
     } catch (err) {
       const errorMessage = err.message.toLowerCase();
-      let userFriendlyMessage = 'Could not save to Obsidian. The debate is still available in your browser.';
+      let userFriendlyMessage = 'Could not save debate. The transcript is still available in your browser.';
 
       if (errorMessage.includes('api key') || errorMessage.includes('unauthorized')) {
         userFriendlyMessage = 'Authentication failed. Please check your save settings.';
       } else if (errorMessage.includes('vault') || errorMessage.includes('obsidian')) {
-        userFriendlyMessage = 'Obsidian vault not found. Please ensure Obsidian is running and configured.';
+        userFriendlyMessage = 'Local vault save failed. Please check your local save settings.';
       }
 
       // Non-fatal: the debate still happened; Obsidian save is a bonus
@@ -265,9 +354,20 @@ export default function App() {
     setPhase('done');
 
     // Register this debate in the sidebar history
-    const newDebate = { id: Date.now(), topic: submittedTopic, date: new Date() };
+    const newDebate = { id: savedDebateId || Date.now(), topic: submittedTopic, date: new Date() };
     setDebates(prev => [...prev, newDebate]);
     setCurrentDebateId(newDebate.id);
+  }
+
+  function handleShareLink() {
+    if (!currentDebateId || !shareUrl) {
+      setStatus('Share link unavailable until a database debate ID is assigned.');
+      return;
+    }
+
+    navigator.clipboard.writeText(shareUrl)
+      .then(() => setStatus('Share link copied to clipboard.'))
+      .catch(() => setStatus(`Share link: ${shareUrl}`));
   }
 
   // --- Render ---
@@ -286,7 +386,7 @@ export default function App() {
           onToggle={() => setSidebarOpen(open => !open)}
           debates={debates}
           currentDebateId={currentDebateId}
-          onSelectDebate={setCurrentDebateId}
+          onSelectDebate={handleSelectDebate}
         />
 
         <main className="main-content">
@@ -352,6 +452,23 @@ export default function App() {
                   })}
                 </div>
               )}
+
+              {phase === 'done' && (
+                <div style={styles.shareActions}>
+                  <button
+                    type="button"
+                    onClick={handleShareLink}
+                    style={{
+                      ...styles.shareButton,
+                      opacity: shareUrl ? 1 : 0.5,
+                      cursor: shareUrl ? 'pointer' : 'not-allowed',
+                    }}
+                    disabled={!shareUrl}
+                  >
+                    Copy Share Link
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </main>
@@ -412,5 +529,22 @@ const styles = {
     paddingTop: 'var(--spacing-md)',
     borderTop: '1px solid var(--border)',
     animation: 'fadeIn 0.6s var(--ease-out)',
+  },
+  shareActions: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginTop: 'var(--spacing-sm)',
+  },
+  shareButton: {
+    background: 'transparent',
+    border: '1px solid var(--gold)',
+    color: 'var(--gold)',
+    padding: '0.45rem 0.85rem',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.7rem',
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    opacity: 1,
   },
 };
