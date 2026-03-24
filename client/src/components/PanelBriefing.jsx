@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 
 /**
  * PanelBriefing — A "dossier" summary shown before the debate begins.
@@ -19,17 +19,21 @@ const PERSONA_COLOURS = [
   'var(--persona-4)',
 ];
 
-export default function PanelBriefing({ personas }) {
+function PanelBriefing({ personas }) {
   const [expandedIndex, setExpandedIndex] = useState(null);
 
   // If personas don't have the new stance/relationships fields, don't render
   if (!personas.length || !personas[0].stance) return null;
 
   // Build a name -> colour lookup so relationship names can be tinted
-  const colourByName = {};
-  personas.forEach((p, i) => {
-    colourByName[p.name] = PERSONA_COLOURS[i] ?? 'var(--text-primary)';
-  });
+  const colourByName = useMemo(() => {
+    const map = {};
+    personas.forEach((p, i) => {
+      const safeName = typeof p?.name === 'string' && p.name.trim() ? p.name : `Panellist ${i + 1}`;
+      map[safeName] = PERSONA_COLOURS[i] ?? 'var(--text-primary)';
+    });
+    return map;
+  }, [personas]);
 
   function toggleExpand(index) {
     setExpandedIndex(prev => (prev === index ? null : index));
@@ -231,3 +235,6 @@ const styles = {
     lineHeight: '1.5',
   },
 };
+
+
+export default memo(PanelBriefing);

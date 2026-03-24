@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Header from './components/Header.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import Footer from './components/Footer.jsx';
@@ -9,48 +9,34 @@ import SummaryPanel from './components/SummaryPanel.jsx';
 import PanelBriefing from './components/PanelBriefing.jsx';
 import StatusBar from './components/StatusBar.jsx';
 
-/**
- * App — Root component and orchestrator.
- *
- * Layout (always rendered):
- *   <Header>   — fixed 56px bar
- *   <Sidebar>  — collapsible history panel
- *   <main>     — scrollable content area
- *   <Footer>
- *
- * Content flow inside <main>:
- *   1. TopicInput    — user enters a debate topic
- *   2. PersonaCards  — panellists are generated and revealed
- *   3. DebateThread  — rounds stream in with typewriter effect
- *   4. SummaryPanel  — moderator synthesis and verdict
- */
-
 const TOTAL_ROUNDS = 3;
+const DEFAULT_PERSONA_COUNT = 5;
 
 export default function App() {
-  // --- Core debate state ---
-  const [topic, setTopic]     = useState('');
+  const [topic, setTopic] = useState('');
   const [personas, setPersonas] = useState([]);
-  const [history, setHistory]   = useState([]);
-  const [summary, setSummary]   = useState('');
-  const [verdict, setVerdict]   = useState('');
+  const [history, setHistory] = useState([]);
+  const [summary, setSummary] = useState('');
+  const [verdict, setVerdict] = useState('');
+  const [personaCount, setPersonaCount] = useState(DEFAULT_PERSONA_COUNT);
 
-  // --- UI state ---
-  const [status, setStatus]         = useState('');
-  const [isActive, setIsActive]     = useState(false);
-  const [phase, setPhase]           = useState('input'); // 'input' | 'personas' | 'debate' | 'summary' | 'done'
+  const [status, setStatus] = useState('');
+  const [isActive, setIsActive] = useState(false);
+  const [phase, setPhase] = useState('input');
   const [typingIndex, setTypingIndex] = useState(-1);
-  const [savedPath, setSavedPath]   = useState('');
+  const [savedPath, setSavedPath] = useState('');
   const [currentRound, setCurrentRound] = useState(0);
 
-  // --- Layout state ---
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  // --- Debate history (current session only, shown in sidebar) ---
-  const [debates, setDebates]               = useState([]);
+  const [debates, setDebates] = useState([]);
   const [currentDebateId, setCurrentDebateId] = useState(null);
 
-  // Load debates from localStorage on mount
+  const mountedRef = useRef(true);
+  const inFlightRef = useRef(false);
+  const requestIdRef = useRef(0);
+
+  const isLoading = isActive || inFlightRef.current;
+
   useEffect(() => {
     const savedDebates = localStorage.getItem('the-panel-debates');
     if (savedDebates) {
@@ -63,20 +49,20 @@ export default function App() {
     }
   }, []);
 
-  // Keyboard shortcuts
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
+
   useEffect(() => {
     function handleKeyDown(event) {
-      // Ctrl/Cmd + N for new debate
       if ((event.ctrlKey || event.metaKey) && event.key === 'n') {
         event.preventDefault();
         handleNewDebate();
       }
-      // Ctrl/Cmd + S for save (when debate is done)
+
       if ((event.ctrlKey || event.metaKey) && event.key === 's' && phase === 'done') {
         event.preventDefault();
-        // Trigger save if not already saved
         if (!savedPath) {
-          // This would need to be implemented - for now just show a message
           setStatus('Save functionality would be triggered here (Ctrl+S)');
         }
       }
@@ -86,11 +72,15 @@ export default function App() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [phase, savedPath]);
 
-  /**
-   * Reset all debate state so the user can start a fresh topic.
-   * Called by the Header's "New Debate" button.
-   */
+  const safeSet = useCallback((setter, value, requestId) => {
+    if (!mountedRef.current) return;
+    if (requestId !== requestIdRef.current) return;
+    setter(value);
+  }, []);
+
   function handleNewDebate() {
+    requestIdRef.current += 1; // invalidate stale async work
+    inFlightRef.current = false;
     setTopic('');
     setPersonas([]);
     setHistory([]);
@@ -101,230 +91,237 @@ export default function App() {
     setTypingIndex(-1);
     setCurrentRound(0);
     setPhase('input');
+    setIsActive(false);
+    setPersonaCount(DEFAULT_PERSONA_COUNT);
   }
 
-  /**
-   * Main orchestration function — called when the user submits a topic.
-   * Each step is sequential: we await each API call before moving on.
-   */
-  async function handleTopicSubmit(submittedTopic) {
-    setTopic(submittedTopic);
-    setPhase('personas');
-
-    // -- Step 1: Generate personas --
-    setStatus('Assembling the panel...');
-    setIsActive(true);
-
-    let generatedPersonas;
+  async function requestJson(url, payload, fallbackMessage) {
+    let response;
     try {
-      const res = await fetch('/api/generate-personas', {
+      response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: submittedTopic }),
+        body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (data.error) throw new Error(data.message);
-      generatedPersonas = data.personas;
-      setPersonas(generatedPersonas);
-    } catch (err) {
-      const errorMessage = err.message.toLowerCase();
-      let userFriendlyMessage = 'Unable to generate debate panel. Please try again.';
+    } catch {
+      throw new Error(fallbackMessage);
+    }
 
-      if (errorMessage.includes('timeout')) {
-        userFriendlyMessage = 'Request timed out. The AI service is busy. Please try again in a moment.';
-      } else if (errorMessage.includes('rate limit') || errorMessage.includes('too many')) {
-        userFriendlyMessage = 'Too many requests. Please wait a few minutes before trying again.';
-      } else if (errorMessage.includes('topic') && errorMessage.includes('length')) {
-        userFriendlyMessage = 'Topic is too long. Please use 100 characters or less.';
-      }
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error(fallbackMessage);
+    }
 
-      setStatus(`Panel assembly failed: ${userFriendlyMessage}`);
-      setIsActive(false);
+    if (!response.ok || data.error) {
+      throw new Error(data?.message || fallbackMessage);
+    }
+
+    if (!data || typeof data !== 'object') {
+      throw new Error(fallbackMessage);
+    }
+
+    return data;
+  }
+
+  async function handleTopicSubmit(submittedTopic, submittedCount = DEFAULT_PERSONA_COUNT) {
+    if (inFlightRef.current) return;
+
+    const normalizedTopic = typeof submittedTopic === 'string' ? submittedTopic.trim() : '';
+    const normalizedCount = Number.isInteger(submittedCount)
+      ? Math.min(Math.max(submittedCount, 3), 7)
+      : DEFAULT_PERSONA_COUNT;
+
+    if (!normalizedTopic) {
+      setStatus('Please enter a topic.');
       return;
     }
 
-    // Brief pause so the user can read the personas before the debate begins
-    await delay(1200);
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    inFlightRef.current = true;
 
-    // -- Step 2: Run 3 debate rounds --
-    setPhase('debate');
+    safeSet(setTopic, normalizedTopic, requestId);
+    safeSet(setPersonaCount, normalizedCount, requestId);
+    safeSet(setPhase, 'personas', requestId);
+    safeSet(setStatus, 'Assembling the panel...', requestId);
+    safeSet(setIsActive, true, requestId);
+
+    let generatedPersonas;
+    try {
+      const data = await requestJson(
+        '/api/generate-personas',
+        { topic: normalizedTopic, count: normalizedCount },
+        'Unable to generate debate panel. Please try again.',
+      );
+
+      generatedPersonas = Array.isArray(data.personas) ? data.personas : [];
+      if (generatedPersonas.length === 0) {
+        throw new Error('Unable to generate debate panel. Please try again.');
+      }
+
+      safeSet(setPersonas, generatedPersonas, requestId);
+    } catch (err) {
+      safeSet(setStatus, `Panel assembly failed: ${err.message}`, requestId);
+      safeSet(setIsActive, false, requestId);
+      inFlightRef.current = false;
+      return;
+    }
+
+    await delay(1200);
+    if (requestId !== requestIdRef.current || !mountedRef.current) return;
+
+    safeSet(setPhase, 'debate', requestId);
     let currentHistory = [];
 
     for (let round = 1; round <= TOTAL_ROUNDS; round++) {
-      setCurrentRound(round);
-      setStatus(`Round ${round} of ${TOTAL_ROUNDS} — the panel is deliberating...`);
+      safeSet(setCurrentRound, round, requestId);
+      safeSet(setStatus, `Round ${round} of ${TOTAL_ROUNDS} — the panel is deliberating...`, requestId);
 
       try {
-        const res = await fetch('/api/debate-round', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const data = await requestJson(
+          '/api/debate-round',
+          {
             personas: generatedPersonas,
             history: currentHistory,
-            topic: submittedTopic,
+            topic: normalizedTopic,
             roundNumber: round,
-          }),
-        });
-        const data = await res.json();
-        if (data.error) throw new Error(data.message);
+          },
+          'Debate round failed. The discussion may be incomplete.',
+        );
 
-        // Reveal messages one at a time with enough pause for the typewriter to run
-        for (let i = currentHistory.length; i < data.history.length; i++) {
-          setTypingIndex(i);
-          setHistory([...data.history.slice(0, i + 1)]);
-          await delay(data.history[i].content.length * 12 + 400);
+        const roundHistory = Array.isArray(data.history) ? data.history : [];
+        for (let i = currentHistory.length; i < roundHistory.length; i++) {
+          if (requestId !== requestIdRef.current || !mountedRef.current) return;
+          safeSet(setTypingIndex, i, requestId);
+          safeSet(setHistory, roundHistory.slice(0, i + 1), requestId);
+
+          const msg = roundHistory[i]?.content;
+          await delay(typeof msg === 'string' ? msg.length * 12 + 400 : 700);
         }
 
-        currentHistory = data.history;
+        currentHistory = roundHistory;
       } catch (err) {
-        const errorMessage = err.message.toLowerCase();
-        let userFriendlyMessage = 'Debate round failed. The discussion may be incomplete.';
-
-        if (errorMessage.includes('timeout')) {
-          userFriendlyMessage = 'Round timed out. The AI service is busy. Continuing with available responses.';
-        } else if (errorMessage.includes('rate limit') || errorMessage.includes('too many')) {
-          userFriendlyMessage = 'Rate limit reached. Waiting before continuing...';
-          await delay(5000); // Wait 5 seconds before failing
-        }
-
-        setStatus(`Round ${round} issue: ${userFriendlyMessage}`);
-        setIsActive(false);
+        safeSet(setStatus, `Round ${round} issue: ${err.message}`, requestId);
+        safeSet(setIsActive, false, requestId);
+        inFlightRef.current = false;
         return;
       }
     }
 
-    setTypingIndex(-1);
+    safeSet(setTypingIndex, -1, requestId);
+    safeSet(setStatus, 'Moderator is synthesising the debate...', requestId);
+    safeSet(setPhase, 'summary', requestId);
 
-    // -- Step 3: Summarise --
-    setStatus('Moderator is synthesising the debate...');
-    setPhase('summary');
-
-    let debateSummary, debateVerdict;
+    let debateSummary;
+    let debateVerdict;
     try {
-      const res = await fetch('/api/summarise', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: submittedTopic, history: currentHistory }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.message);
-      debateSummary = data.summary;
-      debateVerdict = data.verdict;
-      setSummary(debateSummary);
-      setVerdict(debateVerdict);
+      const data = await requestJson(
+        '/api/summarise',
+        { topic: normalizedTopic, history: currentHistory },
+        'Unable to generate debate summary. The discussion is still available.',
+      );
+      debateSummary = typeof data.summary === 'string' ? data.summary : '';
+      debateVerdict = typeof data.verdict === 'string' ? data.verdict : 'No clear verdict reached.';
+
+      safeSet(setSummary, debateSummary, requestId);
+      safeSet(setVerdict, debateVerdict, requestId);
     } catch (err) {
-      const errorMessage = err.message.toLowerCase();
-      let userFriendlyMessage = 'Unable to generate debate summary. The discussion is still available.';
-
-      if (errorMessage.includes('timeout')) {
-        userFriendlyMessage = 'Summary generation timed out. The debate transcript is still available.';
-      }
-
-      setStatus(`Summary failed: ${userFriendlyMessage}`);
-      setIsActive(false);
+      safeSet(setStatus, `Summary failed: ${err.message}`, requestId);
+      safeSet(setIsActive, false, requestId);
+      inFlightRef.current = false;
       return;
     }
 
-    // -- Step 4: Save to Obsidian --
-    setStatus('Writing debate to Obsidian vault...');
-
+    safeSet(setStatus, 'Writing debate to Obsidian vault...', requestId);
     try {
       const res = await fetch('/api/save-to-obsidian', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': import.meta.env.VITE_SAVE_API_KEY || 'default-key-for-dev'
+          'x-api-key': import.meta.env.VITE_SAVE_API_KEY || 'default-key-for-dev',
         },
         body: JSON.stringify({
-          topic: submittedTopic,
+          topic: normalizedTopic,
           personas: generatedPersonas,
           history: currentHistory,
           summary: debateSummary,
           verdict: debateVerdict,
+          persona_count: normalizedCount,
         }),
       });
-      const data = await res.json();
-      if (data.error) throw new Error(data.message);
-      setSavedPath(data.path);
-      setStatus(`Saved to Obsidian: ${data.path.split('/').pop()}`);
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data?.message || 'Could not save to Obsidian.');
+      const safePath = typeof data.path === 'string' ? data.path : '';
+
+      safeSet(setSavedPath, safePath, requestId);
+      safeSet(setStatus, safePath ? `Saved to Obsidian: ${safePath.split('/').pop()}` : 'Saved to Obsidian.', requestId);
     } catch (err) {
-      const errorMessage = err.message.toLowerCase();
-      let userFriendlyMessage = 'Could not save to Obsidian. The debate is still available in your browser.';
-
-      if (errorMessage.includes('api key') || errorMessage.includes('unauthorized')) {
-        userFriendlyMessage = 'Authentication failed. Please check your save settings.';
-      } else if (errorMessage.includes('vault') || errorMessage.includes('obsidian')) {
-        userFriendlyMessage = 'Obsidian vault not found. Please ensure Obsidian is running and configured.';
-      }
-
-      // Non-fatal: the debate still happened; Obsidian save is a bonus
-      setStatus(`Save issue: ${userFriendlyMessage}`);
+      safeSet(setStatus, `Save issue: ${err.message}`, requestId);
     }
 
-    setIsActive(false);
-    setPhase('done');
+    safeSet(setIsActive, false, requestId);
+    safeSet(setPhase, 'done', requestId);
+    inFlightRef.current = false;
 
-    // Register this debate in the sidebar history
-    const newDebate = { id: Date.now(), topic: submittedTopic, date: new Date() };
-    setDebates(prev => [...prev, newDebate]);
+    const newDebate = { id: Date.now(), topic: normalizedTopic, date: new Date(), persona_count: normalizedCount };
+    setDebates((prev) => [...prev, newDebate]);
     setCurrentDebateId(newDebate.id);
   }
 
-  // --- Render ---
+  const sidebarDebates = useMemo(
+    () => debates.map((debate) => ({ ...debate, persona_count: debate.persona_count ?? DEFAULT_PERSONA_COUNT })),
+    [debates],
+  );
 
   return (
     <div className="app">
       <Header
         onNewDebate={handleNewDebate}
-        onToggleSidebar={() => setSidebarOpen(open => !open)}
-        onOpenSettings={() => {/* settings panel — future feature */}}
+        onToggleSidebar={() => setSidebarOpen((open) => !open)}
+        onOpenSettings={() => {}}
       />
 
       <div className="main-layout">
         <Sidebar
           isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen(open => !open)}
-          debates={debates}
+          onToggle={() => setSidebarOpen((open) => !open)}
+          debates={sidebarDebates}
           currentDebateId={currentDebateId}
           onSelectDebate={setCurrentDebateId}
         />
 
         <main className="main-content">
           {phase === 'input' ? (
-            /* Landing screen — TopicInput centred in the available space */
-            <TopicInput onSubmit={handleTopicSubmit} isLoading={false} />
+            <TopicInput onSubmit={handleTopicSubmit} isLoading={isLoading} defaultPersonaCount={personaCount} />
           ) : (
-            /* Debate in progress or complete */
             <div className="debate-content">
-              {/* Sticky status strip */}
               <StatusBar status={status} isActive={isActive} />
 
-              {/* Topic heading */}
               <header style={styles.topicHeader}>
                 <div style={styles.topicLabel}>The Panel is debating</div>
                 <h2 style={styles.topicText}>{topic}</h2>
               </header>
 
-              {/* Panellists grid */}
               {personas.length > 0 && (
                 <section>
                   <h3 style={styles.sectionHeading}>The Panellists</h3>
                   <div style={styles.personaGrid}>
                     {personas.map((p, i) => (
-                      <PersonaCard key={p.name} persona={p} index={i} />
+                      <PersonaCard key={p.name ?? `persona-${i}`} persona={p} index={i} />
                     ))}
                   </div>
                 </section>
               )}
 
-              {/* Panel briefing — stance summaries and relationships */}
               {personas.length > 0 && (
                 <section>
                   <PanelBriefing personas={personas} />
                 </section>
               )}
 
-              {/* Debate transcript */}
               {history.length > 0 && (
                 <section>
                   <DebateThread
@@ -337,14 +334,12 @@ export default function App() {
                 </section>
               )}
 
-              {/* Summary and verdict */}
               {summary && (
                 <section>
                   <SummaryPanel summary={summary} verdict={verdict} />
                 </section>
               )}
 
-              {/* Completion note */}
               {phase === 'done' && savedPath && (
                 <div style={styles.completionNote}>
                   Debate archived &middot; {new Date().toLocaleDateString('en-GB', {
@@ -362,9 +357,8 @@ export default function App() {
   );
 }
 
-/** Simple promise-based delay helper */
 function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const styles = {
@@ -385,7 +379,6 @@ const styles = {
     fontFamily: "'Inter', sans-serif",
     fontSize: 'clamp(1.6rem, 3.8vw, 2.5rem)',
     color: 'var(--text-primary)',
-
     lineHeight: '1.3',
   },
   sectionHeading: {

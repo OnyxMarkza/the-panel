@@ -3,18 +3,17 @@ import React, { useState } from 'react';
 /**
  * TopicInput — The opening screen within the main content area.
  *
- * Aesthetic: modern debate chamber. An SVG crest, large Inter
- * logotype, decorative ornament, clean sans-serif input,
- * and an uppercase mono CTA.
- *
- * On submit, calls the parent's onSubmit handler with the topic string.
+ * On submit, calls the parent's onSubmit handler with the topic string and
+ * selected persona count.
  */
-export default function TopicInput({ onSubmit, isLoading }) {
+export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 5 }) {
   const [topic, setTopic] = useState('');
   const [focused, setFocused] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [personaCount, setPersonaCount] = useState(defaultPersonaCount);
 
   const MAX_TOPIC_LENGTH = 100;
+  const PERSONA_COUNT_OPTIONS = [3, 4, 5, 6, 7];
 
   function handleTopicChange(e) {
     const value = e.target.value;
@@ -25,24 +24,24 @@ export default function TopicInput({ onSubmit, isLoading }) {
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (topic.trim()) {
-      onSubmit(topic.trim());
+    const normalizedTopic = topic.trim();
+    const safeCount = Number.isInteger(personaCount) ? personaCount : defaultPersonaCount;
+
+    if (normalizedTopic && !isLoading) {
+      onSubmit(normalizedTopic, safeCount);
     }
   }
 
-  // Single declaration — was duplicated in the original (bug fix)
   const isDisabled = isLoading || !topic.trim();
   const charCount = topic.length;
   const isNearLimit = charCount > 80;
 
   return (
     <div style={styles.wrapper}>
-      {/* Decorative crest */}
       <div style={styles.crest} aria-hidden="true">
         <CrestSVG />
       </div>
 
-      {/* Masthead */}
       <div style={styles.masthead}>
         <div style={styles.eyebrow}>Est. In Dispute</div>
         <h1 style={styles.title}>The Panel</h1>
@@ -52,10 +51,9 @@ export default function TopicInput({ onSubmit, isLoading }) {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form onSubmit={handleSubmit} style={styles.form} aria-busy={isLoading}>
         <div style={styles.inputLabel}>State your proposition</div>
 
-        {/* Input wrapper — border turns gold on focus */}
         <div
           style={{
             ...styles.inputWrapper,
@@ -77,37 +75,54 @@ export default function TopicInput({ onSubmit, isLoading }) {
             maxLength={MAX_TOPIC_LENGTH}
             aria-label="Debate topic"
           />
-          {/* Character counter */}
           <div
             style={{
               ...styles.charCounter,
               color: isNearLimit ? 'var(--gold)' : 'var(--text-muted)',
             }}
+            aria-live="polite"
           >
             {charCount}/{MAX_TOPIC_LENGTH}
           </div>
         </div>
 
+        <label style={styles.selectLabel} htmlFor="persona-count-select">
+          Panel size
+        </label>
+        <select
+          id="persona-count-select"
+          value={personaCount}
+          onChange={(e) => setPersonaCount(Number(e.target.value))}
+          disabled={isLoading}
+          aria-label="Select panel size"
+          style={styles.select}
+        >
+          {PERSONA_COUNT_OPTIONS.map((countOption) => (
+            <option key={countOption} value={countOption}>{countOption} panellists</option>
+          ))}
+        </select>
+
         <button
           type="submit"
           disabled={isDisabled}
+          aria-disabled={isDisabled}
+          aria-label={isLoading ? 'Convene panel in progress' : 'Convene the panel'}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           style={{
             ...styles.button,
-            opacity:   isDisabled ? 0.4 : 1,
-            cursor:    isDisabled ? 'not-allowed' : 'pointer',
+            opacity: isDisabled ? 0.4 : 1,
+            cursor: isDisabled ? 'not-allowed' : 'pointer',
             transform: hovered && !isDisabled ? 'translateY(-2px)' : 'translateY(0)',
             boxShadow: hovered && !isDisabled
               ? '0 6px 24px rgba(226, 179, 64, 0.35)'
               : '0 2px 10px rgba(226, 179, 64, 0.12)',
           }}
         >
-          {isLoading ? 'Convening the panel...' : 'Convene the Panel \u2192'}
+          {isLoading ? 'Convening the panel...' : 'Convene the Panel →'}
         </button>
       </form>
 
-      {/* Attribution line */}
       <div style={styles.meta}>
         <span>Groq</span>
         <span style={styles.metaDot}>&middot;</span>
@@ -119,10 +134,6 @@ export default function TopicInput({ onSubmit, isLoading }) {
   );
 }
 
-/**
- * CrestSVG — Circular emblem with the "TP" monogram.
- * Two concentric rings + four cardinal tick marks.
- */
 function CrestSVG() {
   return (
     <svg
@@ -135,9 +146,9 @@ function CrestSVG() {
     >
       <circle cx="36" cy="36" r="34" stroke="var(--gold)" strokeWidth="0.75" opacity="0.45" />
       <circle cx="36" cy="36" r="28" stroke="var(--gold)" strokeWidth="0.5" opacity="0.25" />
-      <line x1="36" y1="2"  x2="36" y2="8"  stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
+      <line x1="36" y1="2" x2="36" y2="8" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
       <line x1="36" y1="64" x2="36" y2="70" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
-      <line x1="2"  y1="36" x2="8"  y2="36" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
+      <line x1="2" y1="36" x2="8" y2="36" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
       <line x1="64" y1="36" x2="70" y2="36" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
       <text
         x="36"
@@ -239,7 +250,6 @@ const styles = {
     outline: 'none',
     color: 'var(--text-primary)',
     fontFamily: "'Inter', sans-serif",
-
     fontSize: '1.15rem',
     lineHeight: '1.5',
     paddingRight: '64px',
@@ -254,34 +264,41 @@ const styles = {
     fontWeight: '500',
     transition: 'color 0.2s var(--ease-out)',
   },
+  selectLabel: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.58rem',
+    letterSpacing: '0.2em',
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    alignSelf: 'flex-start',
+    marginTop: '0.25rem',
+  },
+  select: {
+    height: '40px',
+    background: 'var(--bg-card)',
+    color: 'var(--text-primary)',
+    border: '1px solid var(--border)',
+    borderRadius: '3px',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.8rem',
+    padding: '0 0.75rem',
+  },
   button: {
     background: 'var(--gold)',
     color: '#1a1a1a',
     border: 'none',
-    borderRadius: '3px',
-    padding: '12px 28px',
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.68rem',
-    fontWeight: '500',
-    letterSpacing: '0.14em',
-    textTransform: 'uppercase',
-    alignSelf: 'flex-end',
-    marginTop: 'var(--spacing-xs)',
-    transition:
-      'opacity 0.2s var(--ease-out), transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out)',
   },
   meta: {
     display: 'flex',
-    gap: 'var(--spacing-sm)',
-    color: 'var(--text-muted)',
+    alignItems: 'center',
+    gap: '0.4rem',
     fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.6rem',
-    letterSpacing: '0.06em',
-    opacity: 0.55,
-    marginTop: 'var(--spacing-xs)',
+    fontSize: '0.62rem',
+    color: 'var(--text-muted)',
+    opacity: 0.7,
+    marginTop: 'var(--spacing-sm)',
   },
   metaDot: {
-    color: 'var(--gold)',
-    opacity: 0.45,
+    opacity: 0.5,
   },
 };

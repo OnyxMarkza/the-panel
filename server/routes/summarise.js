@@ -3,22 +3,21 @@ import { callGroq } from '../lib/groq.js';
 
 const router = Router();
 
-/**
- * POST /api/summarise
- * Body: { topic, history }
- * Returns: { summary, verdict }
- *
- * Asks Groq to act as a neutral moderator and synthesise the debate.
- */
 router.post('/summarise', async (req, res) => {
-  const { topic, history } = req.body;
+  const topic = typeof req.body?.topic === 'string' ? req.body.topic.trim() : '';
+  const history = Array.isArray(req.body?.history) ? req.body.history : [];
 
-  if (!topic || !history) {
-    return res.status(400).json({ error: true, message: 'topic and history are required.' });
+  if (!topic) {
+    return res.status(400).json({ error: true, code: 'VALIDATION_ERROR', message: 'topic is required.' });
+  }
+
+  if (history.length === 0) {
+    return res.status(422).json({ error: true, code: 'VALIDATION_ERROR', message: 'history must include at least one message.' });
   }
 
   const transcript = history
-    .map(msg => `${msg.persona}: ${msg.content}`)
+    .filter((msg) => msg && typeof msg === 'object')
+    .map((msg, i) => `${msg.persona || `Panellist ${i + 1}`}: ${msg.content || ''}`)
     .join('\n\n');
 
   const systemPrompt = `You are a neutral, senior moderator summarising a panel debate.
@@ -43,17 +42,16 @@ VERDICT: [your verdict here]`;
       { role: 'user', content: userPrompt },
     ], 600);
 
-    // Parse the structured response
     const summaryMatch = raw.match(/SUMMARY:\s*([\s\S]*?)(?=VERDICT:|$)/i);
     const verdictMatch = raw.match(/VERDICT:\s*([\s\S]*?)$/i);
 
     const summary = summaryMatch ? summaryMatch[1].trim() : raw.trim();
     const verdict = verdictMatch ? verdictMatch[1].trim() : 'No clear verdict reached.';
 
-    res.json({ summary, verdict });
+    return res.json({ summary, verdict });
   } catch (err) {
-    console.error('[summarise] Error:', err.message);
-    res.status(500).json({ error: true, message: err.message });
+    console.error('[summarise] Upstream error:', err.message);
+    return res.status(502).json({ error: true, code: 'UPSTREAM_ERROR', message: 'Summary generation failed upstream.' });
   }
 });
 
