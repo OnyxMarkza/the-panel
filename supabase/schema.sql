@@ -12,6 +12,7 @@ CREATE TABLE debates (
   updated_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   summary       TEXT,
   verdict       TEXT,
+  persona_count INT DEFAULT 5,
   obsidian_path TEXT  -- path to the .md file written in the vault, for cross-reference
 );
 

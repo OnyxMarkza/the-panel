@@ -11,6 +11,7 @@ import React, { useState } from 'react';
  */
 export default function TopicInput({ onSubmit, isLoading }) {
   const [topic, setTopic] = useState('');
+  const [personaCount, setPersonaCount] = useState(5);
   const [focused, setFocused] = useState(false);
   const [hovered, setHovered] = useState(false);
 
@@ -26,7 +27,7 @@ export default function TopicInput({ onSubmit, isLoading }) {
   function handleSubmit(e) {
     e.preventDefault();
     if (topic.trim()) {
-      onSubmit(topic.trim());
+      onSubmit(topic.trim(), personaCount);
     }
   }
 
@@ -48,7 +49,7 @@ export default function TopicInput({ onSubmit, isLoading }) {
         <h1 style={styles.title}>The Panel</h1>
         <div style={styles.ornament} aria-hidden="true">* --- *</div>
         <p style={styles.subtitle}>
-          Enter a topic. Five minds will convene. The debate begins.
+          Enter a topic. Set the panel size. The debate begins.
         </p>
       </div>
 
@@ -85,6 +86,28 @@ export default function TopicInput({ onSubmit, isLoading }) {
             }}
           >
             {charCount}/{MAX_TOPIC_LENGTH}
+          </div>
+        </div>
+
+        <div style={styles.rangeWrapper}>
+          <div style={styles.rangeLabelRow}>
+            <span style={styles.rangeLabel}>Panel size</span>
+            <span style={styles.rangeValue}>{personaCount}</span>
+          </div>
+          <input
+            type="range"
+            min="3"
+            max="7"
+            step="1"
+            value={personaCount}
+            onChange={(e) => setPersonaCount(Number(e.target.value))}
+            disabled={isLoading}
+            aria-label="Persona count"
+            style={styles.rangeInput}
+          />
+          <div style={styles.rangeTicks}>
+            <span>3</span>
+            <span>7</span>
           </div>
         </div>
 
@@ -253,6 +276,44 @@ const styles = {
     fontSize: '0.62rem',
     fontWeight: '500',
     transition: 'color 0.2s var(--ease-out)',
+  },
+  rangeWrapper: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.35rem',
+    margin: '0.2rem 0 0.45rem',
+  },
+  rangeLabelRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  rangeLabel: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.58rem',
+    color: 'var(--text-muted)',
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase',
+  },
+  rangeValue: {
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '0.85rem',
+    color: 'var(--gold)',
+    fontWeight: '600',
+  },
+  rangeInput: {
+    width: '100%',
+    accentColor: 'var(--gold)',
+    cursor: 'pointer',
+  },
+  rangeTicks: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '0.58rem',
+    color: 'var(--text-muted)',
+    opacity: 0.75,
+    letterSpacing: '0.08em',
   },
   button: {
     background: 'var(--gold)',
