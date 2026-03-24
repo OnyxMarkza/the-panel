@@ -23,6 +23,17 @@ const supabase = createClient(
  * Create a new debate row and return its generated UUID.
  *
  * @param {string} topic - The debate topic.
+ * @param {number} [personaCount=5] - Number of personas used in the debate.
+ * @returns {Promise<string>} The new debate's UUID.
+ */
+export async function insertDebate(topic, personaCount = 5) {
+  const count = Number.isInteger(personaCount)
+    ? Math.min(7, Math.max(3, personaCount))
+    : 5;
+
+  const { data, error } = await supabase
+    .from('debates')
+    .insert({ topic, persona_count: count })
  * @param {number} personaCount - Number of personas for this debate.
  * @returns {Promise<string>} The new debate's UUID.
  */
@@ -240,6 +251,7 @@ export async function searchDebates(query, limit = 20) {
 export async function saveDebateToSupabase({ topic, personas, history, summary, verdict, obsidianPath }) {
   const personaCount = Array.isArray(personas) && personas.length > 0 ? personas.length : 5;
   // Create the parent debate row first so we have an ID for foreign keys
+  const debateId = await insertDebate(topic, personas?.length ?? 5);
   const debateId = await insertDebate(topic, personaCount);
 
   // Insert all personas and get back a name → UUID map

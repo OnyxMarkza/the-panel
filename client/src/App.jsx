@@ -30,6 +30,7 @@ const TOTAL_ROUNDS = 3;
 export default function App() {
   // --- Core debate state ---
   const [topic, setTopic]     = useState('');
+  const [personaCount, setPersonaCount] = useState(5);
   const [personas, setPersonas] = useState([]);
   const [history, setHistory]   = useState([]);
   const [summary, setSummary]   = useState('');
@@ -102,6 +103,7 @@ export default function App() {
    */
   function handleNewDebate() {
     setTopic('');
+    setPersonaCount(5);
     setPersonas([]);
     setHistory([]);
     setSummary('');
@@ -122,6 +124,8 @@ export default function App() {
    * Main orchestration function — called when the user submits a topic.
    * Each step is sequential: we await each API call before moving on.
    */
+  async function handleTopicSubmit(submittedTopic, submittedPersonaCount = 5) {
+    setPersonaCount(submittedPersonaCount);
   async function handleTopicSubmit(submittedTopic) {
     let savedDebateId = null;
     setTopic(submittedTopic);
@@ -136,7 +140,7 @@ export default function App() {
       const res = await fetch('/api/generate-personas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: submittedTopic }),
+        body: JSON.stringify({ topic: submittedTopic, count: submittedPersonaCount }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.message);
@@ -352,7 +356,9 @@ export default function App() {
               {/* Panellists grid */}
               {personas.length > 0 && (
                 <section>
-                  <h3 style={styles.sectionHeading}>The Panellists</h3>
+                  <h3 style={styles.sectionHeading}>
+                    The Panellists ({personas.length || personaCount})
+                  </h3>
                   <div style={styles.personaGrid}>
                     {personas.map((p, i) => (
                       <PersonaCard key={p.name} persona={p} index={i} />
