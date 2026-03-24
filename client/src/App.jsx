@@ -314,14 +314,12 @@ function DebateHome() {
           summary: debateSummary,
           verdict: debateVerdict,
           persona_count: normalizedCount,
-        }),
-      });
+        },
+        'Could not save debate.',
+      );
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) throw new Error(data?.message || 'Could not save debate.');
-
-      const returnedDebateId = data.id || null;
-      const returnedPath = data.path || '';
+      const returnedDebateId = saveData.id || null;
+      const returnedPath = saveData.path || '';
 
       safeSet(setSavedPath, returnedPath, requestId);
       safeSet(setCurrentDebateId, returnedDebateId, requestId);
@@ -333,7 +331,7 @@ function DebateHome() {
         safeSet(setStatus, 'Debate saved and share link generated.', requestId);
       } else if (returnedPath) {
         safeSet(setStatus, `Saved locally: ${returnedPath.split('/').pop()}`, requestId);
-      } else if (data.success) {
+      } else if (saveData.success) {
         safeSet(setStatus, 'Debate save completed.', requestId);
       } else {
         safeSet(setStatus, 'Debate save failed; transcript remains available locally.', requestId);
@@ -459,38 +457,9 @@ function DebateHome() {
                     Copy Share Link
                   </button>
                 </div>
-              </section>
-            )}
-
-            {personas.length > 0 && phase !== 'input' && (
-              <section>
-                <PanelBriefing personas={personas} />
-              </section>
-            )}
-
-            {(phase === 'debate' || phase === 'summary' || phase === 'done') && (
-              <section>
-                <DebateThread
-                  history={history}
-                  personas={personas}
-                  typingIndex={typingIndex}
-                  currentRound={currentRound}
-                  totalRounds={TOTAL_ROUNDS}
-                />
-              </section>
-            )}
-
-            {(phase === 'summary' || phase === 'done') && (
-              <section>
-                <SummaryPanel
-                  summary={summary}
-                  verdict={verdict}
-                  debateId={debateId}
-                />
-                {savedPath && <p style={savedPathText}>Saved: {savedPath}</p>}
-              </section>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </main>
       </div>
 

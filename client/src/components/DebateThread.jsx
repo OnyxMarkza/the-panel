@@ -40,7 +40,7 @@ const TypewriterMessage = memo(function TypewriterMessage({ content, colour, isN
       {displayed.length < safeContent.length && <span style={styles.cursor}>|</span>}
     </span>
   );
-}
+});
 
 /**
  * DebateThread — Scrolling transcript of the debate.
