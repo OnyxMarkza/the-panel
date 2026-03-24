@@ -37,12 +37,10 @@ const TypewriterMessage = memo(function TypewriterMessage({ content, colour, isN
   return (
     <span style={{ ...styles.messageText, borderLeftColor: colour }}>
       {displayed}
-      {displayed.length < safeContent.length && (
-        <span style={styles.cursor} aria-hidden="true">|</span>
-      )}
+      {displayed.length < safeContent.length && <span style={styles.cursor}>|</span>}
     </span>
   );
-});
+}
 
 /**
  * DebateThread — Scrolling transcript of the debate.
@@ -59,9 +57,8 @@ function DebateThread({ history, personas, typingIndex, currentRound, totalRound
     const colours = {};
     const archetypes = {};
 
-    personas.forEach((p, i) => {
-      const fallbackName = `Panelist ${i + 1}`;
-      const name = typeof p?.name === 'string' && p.name.trim() ? p.name : fallbackName;
+    (personas || []).forEach((p, i) => {
+      const name = typeof p?.name === 'string' && p.name.trim() ? p.name : `Panellist ${i + 1}`;
       colours[name] = PERSONA_COLOURS[i] ?? 'var(--text-primary)';
       archetypes[name] = typeof p?.archetype === 'string' ? p.archetype : '';
     });
@@ -70,12 +67,10 @@ function DebateThread({ history, personas, typingIndex, currentRound, totalRound
   }, [personas]);
 
   const normalizedHistory = useMemo(
-    () => history
-      .filter((msg) => msg && typeof msg === 'object')
-      .map((msg, i) => ({
-        persona: typeof msg.persona === 'string' && msg.persona.trim() ? msg.persona : `Panelist ${i + 1}`,
-        content: typeof msg.content === 'string' ? msg.content : '',
-      })),
+    () => (history || []).map((msg, i) => ({
+      persona: typeof msg?.persona === 'string' && msg.persona.trim() ? msg.persona : `Panellist ${i + 1}`,
+      content: typeof msg?.content === 'string' ? msg.content : '',
+    })),
     [history],
   );
 
@@ -96,18 +91,11 @@ function DebateThread({ history, personas, typingIndex, currentRound, totalRound
     <div style={styles.wrapper}>
       <h2 style={styles.heading}>Debate Transcript</h2>
 
-      {currentRound > 0 && currentRound <= totalRounds && (
+      {currentRound > 0 && totalRounds > 0 && (
         <div style={styles.progressContainer}>
-          <div style={styles.progressLabel}>
-            Round {currentRound} of {totalRounds}
-          </div>
+          <div style={styles.progressLabel}>Round {currentRound} of {totalRounds}</div>
           <div style={styles.progressBar}>
-            <div
-              style={{
-                ...styles.progressFill,
-                width: `${(currentRound / totalRounds) * 100}%`,
-              }}
-            />
+            <div style={{ ...styles.progressFill, width: `${(currentRound / totalRounds) * 100}%` }} />
           </div>
         </div>
       )}
@@ -115,36 +103,16 @@ function DebateThread({ history, personas, typingIndex, currentRound, totalRound
       <div style={styles.thread}>
         {normalizedHistory.map((msg, i) => {
           const colour = colourMap[msg.persona] ?? 'var(--text-primary)';
-          const isNew = i === typingIndex;
-
           return (
-            <div
-              key={`${msg.persona}-${i}`}
-              style={{
-                ...styles.entry,
-                animationDelay: `${i * 60}ms`,
-              }}
-            >
+            <div key={`${msg.persona}-${i}`} style={{ ...styles.entry, animationDelay: `${i * 60}ms` }}>
               <div style={styles.speakerRow}>
-                <span style={{ ...styles.speaker, color: colour }}>
-                  {msg.persona}
-                </span>
-                {archetypeMap[msg.persona] && (
-                  <span style={styles.speakerTitle}>
-                    ({archetypeMap[msg.persona]})
-                  </span>
-                )}
+                <span style={{ ...styles.speaker, color: colour }}>{msg.persona}</span>
+                {archetypeMap[msg.persona] && <span style={styles.speakerTitle}>({archetypeMap[msg.persona]})</span>}
               </div>
-
-              <TypewriterMessage
-                content={msg.content}
-                colour={colour}
-                isNew={isNew}
-              />
+              <TypewriterMessage content={msg.content} colour={colour} isNew={i === typingIndex} />
             </div>
           );
         })}
-
         <div ref={bottomRef} />
       </div>
     </div>

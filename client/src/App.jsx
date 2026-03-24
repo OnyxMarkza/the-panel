@@ -15,7 +15,6 @@ const TOTAL_ROUNDS = 3;
 const DEFAULT_PERSONA_COUNT = 5;
 
 function DebateHome() {
-  // --- Core debate state ---
   const [topic, setTopic] = useState('');
   const [personaCount, setPersonaCount] = useState(DEFAULT_PERSONA_COUNT);
   const [personas, setPersonas] = useState([]);
@@ -32,31 +31,23 @@ function DebateHome() {
   const [currentRound, setCurrentRound] = useState(0);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  // --- Debate history (current session only, shown in sidebar) ---
   const [debates, setDebates] = useState([]);
   const [currentDebateId, setCurrentDebateId] = useState(null);
-  const [shareUrl, setShareUrl] = useState('');
 
   const mountedRef = useRef(true);
   const inFlightRef = useRef(false);
   const requestIdRef = useRef(0);
 
-  const isLoading = isActive || inFlightRef.current;
-
   useEffect(() => {
     const savedDebates = localStorage.getItem('the-panel-debates');
-    if (savedDebates) {
-      try {
-        const parsed = JSON.parse(savedDebates);
-        setDebates(parsed);
-      } catch (err) {
-        console.warn('Failed to parse saved debates from localStorage:', err);
-      }
+    if (!savedDebates) return;
+    try {
+      setDebates(JSON.parse(savedDebates));
+    } catch (err) {
+      console.warn('Failed to parse saved debates from localStorage:', err);
     }
   }, []);
 
-  // Keep local debate list persisted between sessions.
   useEffect(() => {
     localStorage.setItem('the-panel-debates', JSON.stringify(debates));
   }, [debates]);
@@ -86,13 +77,12 @@ function DebateHome() {
   }, [phase, savedPath]);
 
   const safeSet = useCallback((setter, value, requestId) => {
-    if (!mountedRef.current) return;
-    if (requestId !== requestIdRef.current) return;
+    if (!mountedRef.current || requestId !== requestIdRef.current) return;
     setter(value);
   }, []);
 
   function handleNewDebate() {
-    requestIdRef.current += 1; // invalidate stale async work
+    requestIdRef.current += 1;
     inFlightRef.current = false;
     setTopic('');
     setPersonaCount(DEFAULT_PERSONA_COUNT);
@@ -220,18 +210,19 @@ function DebateHome() {
 
     let generatedPersonas;
     try {
-      const data = await requestJson(
+      const panelData = await requestJson(
         '/api/generate-personas',
         { topic: normalizedTopic, count: normalizedCount },
         'Unable to generate debate panel. Please try again.',
       );
 
-      generatedPersonas = Array.isArray(data.personas) ? data.personas : [];
+      generatedPersonas = Array.isArray(panelData.personas) ? panelData.personas : [];
       if (generatedPersonas.length === 0) {
         throw new Error('Unable to generate debate panel. Please try again.');
       }
 
       safeSet(setPersonas, generatedPersonas, requestId);
+      safeSet(setPhase, 'debate', requestId);
     } catch (err) {
       safeSet(setStatus, `Panel assembly failed: ${err.message}`, requestId);
       safeSet(setIsActive, false, requestId);
@@ -244,26 +235,19 @@ function DebateHome() {
 
     safeSet(setPhase, 'debate', requestId);
     let currentHistory = [];
-
-    for (let round = 1; round <= TOTAL_ROUNDS; round++) {
+    for (let round = 1; round <= TOTAL_ROUNDS; round += 1) {
       safeSet(setCurrentRound, round, requestId);
       safeSet(setStatus, `Round ${round} of ${TOTAL_ROUNDS} — the panel is deliberating...`, requestId);
 
       try {
-        const data = await requestJson(
+        const roundData = await requestJson(
           '/api/debate-round',
-          {
-            personas: generatedPersonas,
-            history: currentHistory,
-            topic: normalizedTopic,
-            roundNumber: round,
-          },
+          { personas: generatedPersonas, history: currentHistory, topic: normalizedTopic, roundNumber: round },
           'Debate round failed. The discussion may be incomplete.',
         );
 
-        const roundHistory = Array.isArray(data.history) ? data.history : [];
-        for (let i = currentHistory.length; i < roundHistory.length; i++) {
-          if (requestId !== requestIdRef.current || !mountedRef.current) return;
+        const roundHistory = Array.isArray(roundData.history) ? roundData.history : [];
+        for (let i = currentHistory.length; i < roundHistory.length; i += 1) {
           safeSet(setTypingIndex, i, requestId);
           safeSet(setHistory, roundHistory.slice(0, i + 1), requestId);
 
@@ -294,16 +278,18 @@ function DebateHome() {
     safeSet(setStatus, 'Moderator is synthesising the debate...', requestId);
     safeSet(setPhase, 'summary', requestId);
 
-    let debateSummary;
-    let debateVerdict;
     try {
-      const data = await requestJson(
+      safeSet(setPhase, 'summary', requestId);
+      safeSet(setStatus, 'Moderator is drafting the summary...', requestId);
+
+      const summaryData = await requestJson(
         '/api/summarise',
         { topic: normalizedTopic, history: currentHistory },
-        'Unable to generate debate summary. The discussion is still available.',
+        'Could not generate summary.',
       );
-      debateSummary = typeof data.summary === 'string' ? data.summary : '';
-      debateVerdict = typeof data.verdict === 'string' ? data.verdict : 'No clear verdict reached.';
+
+      debateSummary = typeof summaryData.summary === 'string' ? summaryData.summary : '';
+      debateVerdict = typeof summaryData.verdict === 'string' ? summaryData.verdict : '';
 
       safeSet(setSummary, debateSummary, requestId);
       safeSet(setVerdict, debateVerdict, requestId);
@@ -317,13 +303,11 @@ function DebateHome() {
     safeSet(setStatus, 'Saving debate transcript...', requestId);
 
     try {
-      const res = await fetch('/api/save-to-database', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': import.meta.env.VITE_SAVE_API_KEY || 'default-key-for-dev',
-        },
-        body: JSON.stringify({
+      safeSet(setStatus, 'Saving debate transcript...', requestId);
+
+      const saveData = await requestJson(
+        '/api/save-to-database',
+        {
           topic: normalizedTopic,
           personas: generatedPersonas,
           history: currentHistory,
@@ -367,8 +351,11 @@ function DebateHome() {
       safeSet(setStatus, `Save issue: ${userFriendlyMessage}`, requestId);
     }
 
-    safeSet(setIsActive, false, requestId);
+    safeSet(setTypingIndex, -1, requestId);
+    safeSet(setCurrentRound, TOTAL_ROUNDS, requestId);
     safeSet(setPhase, 'done', requestId);
+    safeSet(setIsActive, false, requestId);
+    safeSet(setStatus, 'Debate complete.', requestId);
     inFlightRef.current = false;
 
     const newDebate = { id: Date.now(), topic: normalizedTopic, date: new Date(), persona_count: normalizedCount };
@@ -381,19 +368,6 @@ function DebateHome() {
     [debates],
   );
 
-  function handleShareLink() {
-    if (!currentDebateId || !shareUrl) {
-      setStatus('Share link unavailable until a database debate ID is assigned.');
-      return;
-    }
-
-    navigator.clipboard.writeText(shareUrl)
-      .then(() => setStatus('Share link copied to clipboard.'))
-      .catch(() => setStatus(`Share link: ${shareUrl}`));
-  }
-
-  // --- Render ---
-
   return (
     <div className="app">
       <Header
@@ -402,13 +376,15 @@ function DebateHome() {
         onOpenSettings={() => {}}
       />
 
+      <StatusBar status={status} isActive={isActive} />
+
       <div className="main-layout">
         <Sidebar
           isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen((open) => !open)}
-          debates={sidebarDebates}
+          onToggle={() => setSidebarOpen((prev) => !prev)}
+          debates={debates}
           currentDebateId={currentDebateId}
-          onSelectDebate={handleSelectDebate}
+          onSelectDebate={setCurrentDebateId}
         />
 
         <main className="main-content">
@@ -483,9 +459,38 @@ function DebateHome() {
                     Copy Share Link
                   </button>
                 </div>
-              )}
-            </div>
-          )}
+              </section>
+            )}
+
+            {personas.length > 0 && phase !== 'input' && (
+              <section>
+                <PanelBriefing personas={personas} />
+              </section>
+            )}
+
+            {(phase === 'debate' || phase === 'summary' || phase === 'done') && (
+              <section>
+                <DebateThread
+                  history={history}
+                  personas={personas}
+                  typingIndex={typingIndex}
+                  currentRound={currentRound}
+                  totalRounds={TOTAL_ROUNDS}
+                />
+              </section>
+            )}
+
+            {(phase === 'summary' || phase === 'done') && (
+              <section>
+                <SummaryPanel
+                  summary={summary}
+                  verdict={verdict}
+                  debateId={debateId}
+                />
+                {savedPath && <p style={savedPathText}>Saved: {savedPath}</p>}
+              </section>
+            )}
+          </div>
         </main>
       </div>
 
@@ -503,70 +508,25 @@ export default function App() {
   );
 }
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const sectionHeading = {
+  fontFamily: "'Inter', sans-serif",
+  fontSize: '0.85rem',
+  color: 'var(--gold)',
+  marginBottom: 'var(--spacing-md)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.1em',
+  fontWeight: '400',
+};
 
-const styles = {
-  topicHeader: {
-    animation: 'fadeIn 0.5s var(--ease-out)',
-    borderBottom: '1px solid var(--border)',
-    paddingBottom: 'var(--spacing-lg)',
-  },
-  topicLabel: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.7rem',
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.1em',
-    marginBottom: 'var(--spacing-xs)',
-  },
-  topicText: {
-    fontFamily: "'Inter', sans-serif",
-    fontSize: 'clamp(1.6rem, 3.8vw, 2.5rem)',
-    color: 'var(--text-primary)',
-    lineHeight: '1.3',
-  },
-  sectionHeading: {
-    fontFamily: "'Inter', sans-serif",
-    fontSize: '0.85rem',
-    color: 'var(--gold)',
-    marginBottom: 'var(--spacing-md)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.1em',
-    fontWeight: '400',
-  },
-  personaGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: 'var(--spacing-sm)',
-  },
-  completionNote: {
-    textAlign: 'center',
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.7rem',
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
-    paddingTop: 'var(--spacing-md)',
-    borderTop: '1px solid var(--border)',
-    animation: 'fadeIn 0.6s var(--ease-out)',
-  },
-  shareActions: {
-    display: 'flex',
-    justifyContent: 'center',
-    marginTop: 'var(--spacing-sm)',
-  },
-  shareButton: {
-    background: 'transparent',
-    border: '1px solid var(--gold)',
-    color: 'var(--gold)',
-    padding: '0.45rem 0.85rem',
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '0.7rem',
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    cursor: 'pointer',
-    opacity: 1,
-  },
+const personaGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+  gap: 'var(--spacing-sm)',
+};
+
+const savedPathText = {
+  marginTop: 'var(--spacing-sm)',
+  fontFamily: "'JetBrains Mono', monospace",
+  color: 'var(--text-muted)',
+  fontSize: '0.72rem',
 };

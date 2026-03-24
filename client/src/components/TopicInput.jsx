@@ -9,12 +9,6 @@ const FALLBACK_TOPICS = [
   'Should governments cap weekly work at four days?',
 ];
 
-/**
- * TopicInput — The opening screen within the main content area.
- *
- * On submit, calls the parent's onSubmit handler with the topic string and
- * selected persona count.
- */
 export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 5 }) {
   const [topic, setTopic] = useState('');
   const [personaCount, setPersonaCount] = useState(defaultPersonaCount);
@@ -28,9 +22,7 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
 
   function handleTopicChange(e) {
     const value = e.target.value;
-    if (value.length <= MAX_TOPIC_LENGTH) {
-      setTopic(value);
-    }
+    if (value.length <= MAX_TOPIC_LENGTH) setTopic(value);
   }
 
   function handleSubmit(e) {
@@ -78,31 +70,15 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.crest} aria-hidden="true">
-        <CrestSVG />
-      </div>
-
       <div style={styles.masthead}>
         <div style={styles.eyebrow}>Est. In Dispute</div>
         <h1 style={styles.title}>The Panel</h1>
-        <div style={styles.ornament} aria-hidden="true">* --- *</div>
-        <p style={styles.subtitle}>
-          Enter a topic. Set the panel size. The debate begins.
-        </p>
+        <p style={styles.subtitle}>Enter a topic. Set the panel size. The debate begins.</p>
       </div>
 
-      <form onSubmit={handleSubmit} style={styles.form} aria-busy={isLoading}>
+      <form onSubmit={handleSubmit} style={styles.form}>
         <div style={styles.inputLabel}>State your proposition</div>
-
-        <div
-          style={{
-            ...styles.inputWrapper,
-            borderColor: focused ? 'var(--gold)' : 'var(--border)',
-            boxShadow: focused
-              ? '0 0 0 1px var(--gold), 0 4px 24px rgba(226, 179, 64, 0.12)'
-              : 'none',
-          }}
-        >
+        <div style={{ ...styles.inputWrapper, borderColor: focused ? 'var(--gold)' : 'var(--border)' }}>
           <input
             type="text"
             value={topic}
@@ -113,15 +89,8 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
             disabled={isLoading}
             style={styles.input}
             maxLength={MAX_TOPIC_LENGTH}
-            aria-label="Debate topic"
           />
-          <div
-            style={{
-              ...styles.charCounter,
-              color: isNearLimit ? 'var(--gold)' : 'var(--text-muted)',
-            }}
-            aria-live="polite"
-          >
+          <div style={{ ...styles.charCounter, color: isNearLimit ? 'var(--gold)' : 'var(--text-muted)' }}>
             {charCount}/{MAX_TOPIC_LENGTH}
           </div>
         </div>
@@ -149,19 +118,9 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
         </div>
 
         <div style={styles.actionsRow}>
-          <button
-            type="button"
-            disabled={isLoading || isSuggesting}
-            onClick={handleSurpriseMe}
-            style={{
-              ...styles.ghostButton,
-              opacity: isLoading || isSuggesting ? 0.55 : 1,
-              cursor: isLoading || isSuggesting ? 'not-allowed' : 'pointer',
-            }}
-          >
+          <button type="button" disabled={isLoading || isSuggesting} onClick={handleSurpriseMe} style={styles.ghostButton}>
             {isSuggesting ? 'Finding ideas...' : 'Surprise Me'}
           </button>
-
           <button
             type="submit"
             disabled={isDisabled}
@@ -169,97 +128,24 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
             aria-label={isLoading ? 'Convene panel in progress' : 'Convene the panel'}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
-            style={{
-              ...styles.button,
-              opacity: isDisabled ? 0.4 : 1,
-              cursor: isDisabled ? 'not-allowed' : 'pointer',
-              transform: hovered && !isDisabled ? 'translateY(-2px)' : 'translateY(0)',
-              boxShadow: hovered && !isDisabled
-                ? '0 6px 24px rgba(226, 179, 64, 0.35)'
-                : '0 2px 10px rgba(226, 179, 64, 0.12)',
-            }}
+            style={{ ...styles.button, transform: hovered && !isDisabled ? 'translateY(-2px)' : 'translateY(0)', opacity: isDisabled ? 0.45 : 1 }}
           >
-            {isLoading ? 'Convening the panel...' : 'Convene the Panel \u2192'}
+            {isLoading ? 'Convening the panel...' : 'Convene the Panel →'}
           </button>
         </div>
       </form>
 
-      {(isSuggesting || suggestions.length > 0 || suggestionsError) && (
-        <section style={styles.suggestionsPanel} aria-live="polite">
-          <div style={styles.suggestionsHeader}>Topic ideas</div>
-
-          {isSuggesting && (
-            <div style={styles.skeletonGrid}>
-              {[0, 1, 2, 3, 4].map((item) => (
-                <div key={item} style={styles.skeletonCard} />
-              ))}
-            </div>
-          )}
-
-          {!isSuggesting && suggestionsError && (
-            <p style={styles.errorText}>{suggestionsError}</p>
-          )}
-
-          {!isSuggesting && suggestions.length > 0 && (
-            <div style={styles.chipsGrid}>
-              {suggestions.map((idea, idx) => (
-                <button
-                  key={idea}
-                  type="button"
-                  onClick={() => setTopic(idea)}
-                  style={{
-                    ...styles.chip,
-                    animationDelay: `${idx * 80}ms`,
-                  }}
-                >
-                  {idea}
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
+      {suggestionsError && <p style={styles.error}>{suggestionsError}</p>}
+      {suggestions.length > 0 && (
+        <div style={styles.suggestionsWrap}>
+          {suggestions.map((suggestion) => (
+            <button key={suggestion} type="button" style={styles.suggestionChip} onClick={() => setTopic(suggestion)}>
+              {suggestion}
+            </button>
+          ))}
+        </div>
       )}
-
-      <div style={styles.meta}>
-        <span>Groq</span>
-        <span style={styles.metaDot}>&middot;</span>
-        <span>LLaMA 3.3 70B</span>
-        <span style={styles.metaDot}>&middot;</span>
-        <span>Saved to Obsidian</span>
-      </div>
     </div>
-  );
-}
-
-function CrestSVG() {
-  return (
-    <svg
-      width="72"
-      height="72"
-      viewBox="0 0 72 72"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <circle cx="36" cy="36" r="34" stroke="var(--gold)" strokeWidth="0.75" opacity="0.45" />
-      <circle cx="36" cy="36" r="28" stroke="var(--gold)" strokeWidth="0.5" opacity="0.25" />
-      <line x1="36" y1="2" x2="36" y2="8" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
-      <line x1="36" y1="64" x2="36" y2="70" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
-      <line x1="2" y1="36" x2="8" y2="36" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
-      <line x1="64" y1="36" x2="70" y2="36" stroke="var(--gold)" strokeWidth="1" opacity="0.5" />
-      <text
-        x="36"
-        y="45"
-        textAnchor="middle"
-        fontFamily="'Inter', sans-serif"
-        fontWeight="700"
-        fontSize="22"
-        fill="var(--gold)"
-        letterSpacing="4"
-      >
-        TP
-      </text>
-    </svg>
   );
 }
 
