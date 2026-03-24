@@ -29,8 +29,9 @@ export default function TopicInput({ onSubmit, isLoading }) {
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (topic.trim()) {
-      onSubmit(topic.trim());
+    const normalizedTopic = topic.trim();
+    if (normalizedTopic) {
+      onSubmit(normalizedTopic);
     }
   }
 
@@ -63,6 +64,7 @@ export default function TopicInput({ onSubmit, isLoading }) {
     }
   }
 
+  // Conflict resolution note: keep a single source of truth for submit disabled state.
   const isDisabled = isLoading || !topic.trim();
   const charCount = topic.length;
   const isNearLimit = charCount > 80;
