@@ -4,7 +4,9 @@
       "Bash(find . -not -path */node_modules*)",
       "Bash(grep -v '^$')",
       "Bash(grep -E '\\\\.\\(js|json|md|gitignore\\)$')",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "mcp__bd0696f0-5c44-447d-bd96-077a97d41117__list_projects",
+      "mcp__bd0696f0-5c44-447d-bd96-077a97d41117__deploy_to_vercel"
     ]
   }
 }
