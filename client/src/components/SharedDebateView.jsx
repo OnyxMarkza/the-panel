@@ -4,7 +4,6 @@ import PersonaCard from './PersonaCard.jsx';
 import DebateThread from './DebateThread.jsx';
 import SummaryPanel from './SummaryPanel.jsx';
 import PanelBriefing from './PanelBriefing.jsx';
-import { fetchDebateById } from '../lib/supabaseClient.js';
 
 export default function SharedDebateView() {
   const { id } = useParams();
@@ -22,18 +21,25 @@ export default function SharedDebateView() {
       setNotFound(false);
 
       try {
-        const debate = await fetchDebateById(id);
+        const response = await fetch(`/api/debates/${id}`);
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok || payload?.error) {
+          const message = payload?.message || 'Failed to load debate.';
+          if (response.status === 404) {
+            setNotFound(true);
+          } else {
+            setError(message);
+          }
+          return;
+        }
+
         if (!cancelled) {
-          setData(debate);
+          setData(payload);
         }
       } catch (err) {
         if (cancelled) return;
-        const message = err.message || 'Failed to load debate.';
-        if (message.includes('0 rows')) {
-          setNotFound(true);
-        } else {
-          setError(message);
-        }
+        setError(err.message || 'Failed to load debate.');
       } finally {
         if (!cancelled) setLoading(false);
       }
