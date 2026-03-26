@@ -109,16 +109,25 @@ function DebateHome() {
     navigator.clipboard.writeText(shareUrl).catch(() => {});
   }
 
-  async function requestJson(url, payload, fallbackMessage) {
+  async function requestJson(url, payload, fallbackMessage, timeoutMs = 45000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     let response;
     try {
       response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
-    } catch {
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        throw new Error(`Request timed out after ${timeoutMs}ms`);
+      }
       throw new Error(fallbackMessage);
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     let data;
