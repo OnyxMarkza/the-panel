@@ -19,7 +19,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
  *
  * @param {Array<{role: string, content: string}>} messages
  * @param {number} maxTokens - Token limit (default 1024)
- * @param {number} timeoutMs - Abort the request if no response within this time (default 30000)
+ * @param {number} timeoutMs - Timeout in milliseconds (default 30000)
  * @returns {Promise<string>}
  */
 export async function callGroq(messages, maxTokens = 1024, timeoutMs = 30000) {
@@ -27,24 +27,18 @@ export async function callGroq(messages, maxTokens = 1024, timeoutMs = 30000) {
     throw new Error('GROQ_API_KEY is not configured.');
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  // The Groq SDK (v0.8.x) does not support passing AbortController's `signal`
+  // in request payloads. Implement timeout client-side with Promise.race.
+  const completionPromise = groq.chat.completions.create({
+    model: 'llama-3.3-70b-versatile',
+    messages,
+    max_tokens: maxTokens,
+  });
 
-  try {
-    const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      messages,
-      max_tokens: maxTokens,
-      signal: controller.signal,
-    });
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`Groq request timed out after ${timeoutMs}ms`)), timeoutMs)
+  );
 
-    clearTimeout(timeoutId);
-    return completion.choices[0]?.message?.content ?? '';
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      throw new Error(`Groq request timed out after ${timeoutMs}ms`);
-    }
-    throw error;
-  }
+  const completion = await Promise.race([completionPromise, timeoutPromise]);
+  return completion.choices[0]?.message?.content ?? '';
 }
