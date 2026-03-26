@@ -6,6 +6,12 @@ const DEFAULT_PERSONA_COUNT = 5;
 const MIN_PERSONA_COUNT = 3;
 const MAX_PERSONA_COUNT = 7;
 
+function extractErrorMessage(err) {
+  if (!err) return 'Unknown upstream error.';
+  if (typeof err?.message === 'string' && err.message.trim()) return err.message.trim();
+  return String(err);
+}
+
 function normalizeTopic(input) {
   if (typeof input !== 'string') return '';
   return input.trim().replace(/\s+/g, ' ');
@@ -88,17 +94,21 @@ Each object must have:
         return res.json({ personas: normalized, persona_count: personaCount });
       } catch (attemptError) {
         lastError = attemptError;
-        console.warn(`[personas] Attempt ${attempt}/${maxAttempts} failed:`, attemptError.message);
+        console.warn(`[personas] Attempt ${attempt}/${maxAttempts} failed:`, extractErrorMessage(attemptError));
       }
     }
 
     throw lastError || new Error('Persona generation failed after retry.');
   } catch (err) {
-    console.error('[personas] Upstream error:', err.message);
-    return res.status(502).json({
+    const upstreamMessage = extractErrorMessage(err);
+    console.error('[personas] Upstream error:', upstreamMessage);
+
+    const statusCode = upstreamMessage.includes('GROQ_API_KEY is not configured') ? 500 : 502;
+
+    return res.status(statusCode).json({
       error: true,
       code: 'UPSTREAM_ERROR',
-      message: 'Persona generation upstream request failed.',
+      message: `Persona generation upstream request failed: ${upstreamMessage}`,
     });
   }
 });

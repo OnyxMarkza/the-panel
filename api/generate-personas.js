@@ -1,5 +1,24 @@
 import { callGroq } from '../shared/groqClient.js';
 
+const DEFAULT_PERSONA_COUNT = 5;
+const MIN_PERSONA_COUNT = 3;
+const MAX_PERSONA_COUNT = 7;
+
+function normalizeCount(rawCount) {
+  const requestedCount = Number.isInteger(rawCount) ? rawCount : Number.parseInt(rawCount, 10);
+  if (Number.isNaN(requestedCount)) {
+    return DEFAULT_PERSONA_COUNT;
+  }
+
+  return Math.min(MAX_PERSONA_COUNT, Math.max(MIN_PERSONA_COUNT, requestedCount));
+}
+
+function extractErrorMessage(err) {
+  if (!err) return 'Unknown upstream error.';
+  if (typeof err?.message === 'string' && err.message.trim()) return err.message.trim();
+  return String(err);
+}
+
 /**
  * Vercel serverless function: POST /api/generate-personas
  */
@@ -17,12 +36,7 @@ export default async function handler(req, res) {
   }
 
   const topic = typeof req.body?.topic === 'string' ? req.body.topic.trim() : '';
-  const requestedCount = Number.isInteger(req.body?.count)
-    ? req.body.count
-    : Number.parseInt(req.body?.count, 10);
-  const personaCount = Number.isNaN(requestedCount)
-    ? 5
-    : Math.min(7, Math.max(3, requestedCount));
+  const personaCount = normalizeCount(req.body?.count);
 
   if (!topic) {
     return res.status(400).json({ error: true, message: 'A topic string is required.' });
@@ -64,13 +78,20 @@ Each object must have:
         return res.status(200).json({ personas, persona_count: personaCount });
       } catch (attemptError) {
         lastError = attemptError;
-        console.warn(`[api/generate-personas] Attempt ${attempt}/${maxAttempts} failed:`, attemptError.message);
+        console.warn(`[api/generate-personas] Attempt ${attempt}/${maxAttempts} failed:`, extractErrorMessage(attemptError));
       }
     }
 
     throw lastError || new Error('Persona generation failed after retry.');
   } catch (err) {
-    console.error('[api/generate-personas] Error:', err.message);
-    return res.status(502).json({ error: true, message: 'Persona generation failed upstream.' });
+    const upstreamMessage = extractErrorMessage(err);
+    console.error('[api/generate-personas] Error:', upstreamMessage);
+
+    const statusCode = upstreamMessage.includes('GROQ_API_KEY is not configured') ? 500 : 502;
+
+    return res.status(statusCode).json({
+      error: true,
+      message: `Persona generation failed upstream: ${upstreamMessage}`,
+    });
   }
 }
