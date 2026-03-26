@@ -35,10 +35,15 @@ export async function callGroq(messages, maxTokens = 1024, timeoutMs = 30000) {
     max_tokens: maxTokens,
   });
 
-  const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error(`Groq request timed out after ${timeoutMs}ms`)), timeoutMs)
-  );
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`Groq request timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
 
-  const completion = await Promise.race([completionPromise, timeoutPromise]);
-  return completion.choices[0]?.message?.content ?? '';
+  try {
+    const completion = await Promise.race([completionPromise, timeoutPromise]);
+    return completion.choices[0]?.message?.content ?? '';
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
