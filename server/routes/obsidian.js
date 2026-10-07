@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { writeDebate } from '../lib/vaultWriter.js';
 import { saveDebateToSupabase } from '../lib/supabase.js';
+import { checkApiKey } from '../../shared/apiAuth.js';
 
 const router = Router();
 const DEFAULT_PERSONA_COUNT = 5;
@@ -12,15 +13,9 @@ function normalizeCount(input) {
 }
 
 router.post('/save-to-obsidian', async (req, res) => {
-  const apiKey = req.headers['x-api-key'] || req.query.apiKey;
-  const expectedKey = process.env.SAVE_API_KEY;
-
-  if (expectedKey && apiKey !== expectedKey) {
-    return res.status(401).json({
-      error: true,
-      code: 'AUTH_ERROR',
-      message: 'Invalid or missing API key.',
-    });
+  const auth = checkApiKey(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json(auth.body);
   }
 
   const topic = typeof req.body?.topic === 'string' ? req.body.topic.trim() : '';

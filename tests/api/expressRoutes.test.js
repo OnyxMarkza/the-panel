@@ -11,6 +11,7 @@ const { createApp } = await import('../../server/app.js');
 const samplePersonas = [
   { name: 'Alex Chen', archetype: 'Policy analyst', bias: 'Cautious on regulation', tone: 'measured' },
   { name: 'Jordan Lee', archetype: 'Startup founder', bias: 'Pro-innovation', tone: 'direct' },
+  { name: 'Riley Park', archetype: 'Journalist', bias: 'Skeptical', tone: 'curious' },
 ];
 
 describe('Express API contract (mocked Groq)', () => {
@@ -51,8 +52,8 @@ describe('Express API contract (mocked Groq)', () => {
       });
 
     expect(res.status).toBe(200);
-    expect(res.body.history).toHaveLength(2);
-    expect(vi.mocked(callGroq)).toHaveBeenCalledTimes(2);
+    expect(res.body.history).toHaveLength(3);
+    expect(vi.mocked(callGroq)).toHaveBeenCalledTimes(3);
     expect(res.body.history[0].persona).toBe('Alex Chen');
     expect(res.body.history[1].content).toContain('mock panel response');
   });
@@ -64,16 +65,12 @@ describe('Express API contract (mocked Groq)', () => {
   });
 
   it('POST /api/generate-personas returns personas from mocked Groq JSON', async () => {
-    const third = {
-      name: 'Riley Park',
-      archetype: 'Journalist',
-      bias: 'Skeptical',
-      tone: 'curious',
-      stance: '',
-      relationships: [],
-    };
-    const mockPersonas = [...samplePersonas, third].map((p) => ({ ...p, stance: p.stance ?? '', relationships: p.relationships ?? [] }));
-    vi.mocked(callGroq).mockResolvedValueOnce(JSON.stringify(mockPersonas));
+    const mockPersonas = samplePersonas.map((p) => ({
+      ...p,
+      stance: p.stance ?? '',
+      relationships: p.relationships ?? [],
+    }));
+    vi.mocked(callGroq).mockResolvedValue(JSON.stringify(mockPersonas));
 
     const res = await request(app)
       .post('/api/generate-personas')
@@ -82,6 +79,23 @@ describe('Express API contract (mocked Groq)', () => {
     expect(res.status).toBe(200);
     expect(res.body.personas).toHaveLength(3);
     expect(res.body.persona_count).toBe(3);
+  });
+
+  it('POST /api/generate-personas returns 401 when API_KEY is set and header missing', async () => {
+    const original = process.env.API_KEY;
+    process.env.API_KEY = 'test-route-key';
+    vi.resetModules();
+
+    const { createApp: createAppFresh } = await import('../../server/app.js');
+    const freshApp = createAppFresh();
+
+    const res = await request(freshApp).post('/api/generate-personas').send({ topic: 'Energy', count: 3 });
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('AUTH_ERROR');
+
+    if (original === undefined) delete process.env.API_KEY;
+    else process.env.API_KEY = original;
+    vi.resetModules();
   });
 
   it('GET /api/debates returns 503 when Supabase is not configured', async () => {

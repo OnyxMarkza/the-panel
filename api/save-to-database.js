@@ -1,4 +1,6 @@
 import { saveBattle } from '../shared/storageAdapter.js';
+import { enforceApiKeyForVercel } from '../shared/apiAuth.js';
+import { handleVercelOptions, setVercelCors } from '../shared/vercelCors.js';
 
 /**
  * Vercel serverless function: POST /api/save-to-database
@@ -12,19 +14,16 @@ import { saveBattle } from '../shared/storageAdapter.js';
  * is already complete; saving is best-effort).
  */
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  setVercelCors(req, res);
+  if (handleVercelOptions(req, res)) return;
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: true, message: 'Method not allowed.' });
   }
 
-  const { topic, personas, history, summary, verdict } = req.body;
+  if (!enforceApiKeyForVercel(req, res)) return;
+
+  const { topic, personas, history, summary, verdict, persona_count } = req.body;
 
   if (!topic || !history || !summary) {
     return res.status(400).json({
@@ -33,8 +32,14 @@ export default async function handler(req, res) {
     });
   }
 
-  // saveBattle never throws — storage failures are returned as { success: false }
-  const result = await saveBattle({ topic, personas, history, summary, verdict });
+  const result = await saveBattle({
+    topic,
+    personas,
+    history,
+    summary,
+    verdict,
+    persona_count,
+  });
 
   return res.status(200).json(result);
 }

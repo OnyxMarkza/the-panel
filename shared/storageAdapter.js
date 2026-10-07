@@ -23,17 +23,30 @@ function isLocalEnvironment() {
  * @param {Object} debateData - { topic, personas, history, summary, verdict }
  * @returns {Promise<{ success: boolean, id?: string, path?: string, error?: string }>}
  */
+function normalizePersonaCount(raw, personas) {
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isInteger(parsed)) {
+    return Math.min(7, Math.max(3, parsed));
+  }
+  if (Array.isArray(personas) && personas.length > 0) {
+    return Math.min(7, Math.max(3, personas.length));
+  }
+  return 5;
+}
+
 export async function saveBattle(debateData) {
+  const personaCount = normalizePersonaCount(debateData?.persona_count, debateData?.personas);
+
   try {
     if (isLocalEnvironment()) {
       // Dynamic import avoids loading 'fs' in serverless environments
       const { writeDebate } = await import('../server/lib/vaultWriter.js');
       const filePath = writeDebate(debateData);
-      return { success: true, path: filePath };
+      return { success: true, path: filePath, persona_count: personaCount };
     } else {
       const { saveDebateToSupabase } = await import('../server/lib/supabase.js');
-      const record = await saveDebateToSupabase(debateData);
-      return { success: true, id: record.id };
+      const record = await saveDebateToSupabase({ ...debateData, personaCount });
+      return { success: true, id: record.id, persona_count: personaCount };
     }
   } catch (err) {
     // Log but swallow the error — storage failing shouldn't crash the debate

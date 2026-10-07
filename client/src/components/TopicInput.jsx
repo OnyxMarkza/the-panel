@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getApiHeaders } from '../lib/apiHeaders.js';
 
 const MAX_TOPIC_LENGTH = 100;
 const FALLBACK_TOPICS = [
@@ -45,7 +46,7 @@ export default function TopicInput({ onSubmit, isLoading, defaultPersonaCount = 
     try {
       const res = await fetch('/api/suggest-topics', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ seed: topic.trim() || undefined }),
       });
 

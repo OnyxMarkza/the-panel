@@ -8,6 +8,10 @@ import obsidianRouter from './routes/obsidian.js';
 import debatesRouter from './routes/debates.js';
 import storageRouter from './routes/storage.js';
 import suggestionsRouter from './routes/suggestions.js';
+import {
+  requireApiKeyForDebatesMiddleware,
+  requireApiKeyMiddleware,
+} from '../shared/apiAuth.js';
 
 /**
  * Build the Express app (used by server/index.js and Vitest supertest).
@@ -41,7 +45,27 @@ export function createApp() {
     legacyHeaders: false,
   });
 
-  app.use('/api/generate-personas', personaLimiter);
+  const debateRoundLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 10,
+    message: {
+      error: true,
+      code: 'RATE_LIMIT',
+      message: 'Too many debate round requests. Please wait before trying again.',
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  const protectedApi = requireApiKeyMiddleware;
+  const protectedDebates = requireApiKeyForDebatesMiddleware;
+
+  app.use('/api/generate-personas', personaLimiter, protectedApi);
+  app.use('/api/debate-round', debateRoundLimiter, protectedApi);
+  app.use('/api/summarise', protectedApi);
+  app.use('/api/suggest-topics', protectedApi);
+  app.use('/api/save-to-database', protectedApi);
+  app.use('/api/debates', protectedDebates);
 
   app.use('/api', personasRouter);
   app.use('/api', debateRouter);
