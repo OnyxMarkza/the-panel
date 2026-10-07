@@ -3,9 +3,23 @@ import {
   fetchDebates,
   fetchDebateById,
   searchDebates,
+  SupabaseNotConfiguredError,
 } from '../lib/supabase.js';
 
 const router = Router();
+
+function mapSupabaseRouteError(err, fallbackMessage) {
+  if (err instanceof SupabaseNotConfiguredError) {
+    return {
+      status: 503,
+      body: { error: true, code: 'SERVICE_UNAVAILABLE', message: err.message },
+    };
+  }
+  return {
+    status: 500,
+    body: { error: true, code: 'INTERNAL_ERROR', message: fallbackMessage },
+  };
+}
 
 function parsePositiveInt(raw, fallback, max) {
   const parsed = Number.parseInt(raw, 10);
@@ -30,7 +44,8 @@ router.get('/debates', async (req, res) => {
     });
   } catch (err) {
     console.error('[debates] GET /debates error:', err.message);
-    return res.status(500).json({ error: true, code: 'INTERNAL_ERROR', message: 'Could not fetch debates.' });
+    const mapped = mapSupabaseRouteError(err, 'Could not fetch debates.');
+    return res.status(mapped.status).json(mapped.body);
   }
 });
 
@@ -51,7 +66,8 @@ router.get('/debates/search', async (req, res) => {
     return res.json({ debates });
   } catch (err) {
     console.error('[debates] GET /debates/search error:', err.message);
-    return res.status(500).json({ error: true, code: 'INTERNAL_ERROR', message: 'Could not search debates.' });
+    const mapped = mapSupabaseRouteError(err, 'Could not search debates.');
+    return res.status(mapped.status).json(mapped.body);
   }
 });
 
@@ -67,6 +83,10 @@ router.get('/debates/:id', async (req, res) => {
     return res.json(debate);
   } catch (err) {
     console.error(`[debates] GET /debates/${id} error:`, err.message);
+    if (err instanceof SupabaseNotConfiguredError) {
+      const mapped = mapSupabaseRouteError(err, 'Could not fetch debate.');
+      return res.status(mapped.status).json(mapped.body);
+    }
     const status = err.message.includes('0 rows') ? 404 : 500;
     const code = status === 404 ? 'NOT_FOUND' : 'INTERNAL_ERROR';
     return res.status(status).json({ error: true, code, message: status === 404 ? 'Debate not found.' : 'Could not fetch debate.' });

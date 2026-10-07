@@ -1,32 +1,16 @@
 import { Router } from 'express';
 import { callGroq } from '../lib/groq.js';
+import { parseDebateRoundRequest } from '../../shared/debateRoundValidation.js';
 
 const router = Router();
 
-function normalizeTopic(topic) {
-  return typeof topic === 'string' ? topic.trim().replace(/\s+/g, ' ') : '';
-}
-
-function normalizeHistory(history) {
-  if (!Array.isArray(history)) return [];
-  return history
-    .filter((msg) => msg && typeof msg === 'object')
-    .map((msg, i) => ({
-      persona: typeof msg.persona === 'string' && msg.persona.trim() ? msg.persona.trim() : `Panellist ${i + 1}`,
-      content: typeof msg.content === 'string' ? msg.content.trim() : '',
-    }));
-}
-
 router.post('/debate-round', async (req, res) => {
-  const personas = Array.isArray(req.body?.personas) ? req.body.personas : [];
-  const topic = normalizeTopic(req.body?.topic);
-  const roundNumber = Number.parseInt(req.body?.roundNumber, 10) || 1;
-
-  if (personas.length === 0 || !topic) {
-    return res.status(400).json({ error: true, code: 'VALIDATION_ERROR', message: 'personas and topic are required.' });
+  const parsed = parseDebateRoundRequest(req.body);
+  if (!parsed.ok) {
+    return res.status(parsed.status).json(parsed.body);
   }
 
-  const updatedHistory = normalizeHistory(req.body?.history);
+  const { personas, topic, roundNumber, history: updatedHistory } = parsed;
 
   try {
     for (let i = 0; i < personas.length; i += 1) {
