@@ -1,17 +1,34 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Vite exposes only VITE_ prefixed variables to the browser bundle.
-// VITE_SUPABASE_URL       → your project URL (e.g. https://xyzabc.supabase.co)
-// VITE_SUPABASE_ANON_KEY  → public anon key (safe to expose, row-level security enforces access)
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,      // placeholder: set in .env after creating project
-  import.meta.env.VITE_SUPABASE_ANON_KEY  // placeholder: set in .env after creating project
-);
+/** Thrown when Vite Supabase env vars are missing. */
+export class SupabaseClientNotConfiguredError extends Error {
+  constructor() {
+    super(
+      'Supabase client is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.',
+    );
+    this.name = 'SupabaseClientNotConfiguredError';
+    this.code = 'SUPABASE_NOT_CONFIGURED';
+  }
+}
 
-// ---------------------------------------------------------------------------
-// Read-only helpers for the frontend (debate history browsing)
-// All writes go through the server (service role key) -- never the client.
-// ---------------------------------------------------------------------------
+let cachedClient = null;
+
+/**
+ * Lazy browser Supabase client — safe to import when env is unset (fails on first use).
+ */
+export function getSupabaseBrowserClient() {
+  const url = import.meta.env.VITE_SUPABASE_URL?.trim?.() ?? import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim?.() ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    throw new SupabaseClientNotConfiguredError();
+  }
+
+  if (!cachedClient) {
+    cachedClient = createClient(url, key);
+  }
+  return cachedClient;
+}
 
 /**
  * Fetch a paginated list of debates, newest first.
@@ -21,6 +38,7 @@ const supabase = createClient(
  * @returns {Promise<{ debates: Array, total: number, hasMore: boolean }>}
  */
 export async function fetchDebates(limit = 10, offset = 0) {
+  const supabase = getSupabaseBrowserClient();
   const { data, error, count } = await supabase
     .from('debates')
     .select('id, topic, created_at, summary, verdict', { count: 'exact' })
@@ -43,6 +61,7 @@ export async function fetchDebates(limit = 10, offset = 0) {
  * @returns {Promise<Object>}
  */
 export async function fetchDebateById(id) {
+  const supabase = getSupabaseBrowserClient();
   const { data: debate, error: debateError } = await supabase
     .from('debates')
     .select('*')
@@ -79,6 +98,7 @@ export async function fetchDebateById(id) {
  * @returns {Promise<Array>}
  */
 export async function searchDebates(query, limit = 20) {
+  const supabase = getSupabaseBrowserClient();
   const { data, error } = await supabase
     .from('debates')
     .select('id, topic, created_at, summary, verdict')

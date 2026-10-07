@@ -3,14 +3,41 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
-// Resolve .env relative to THIS file (server/lib/supabase.js → ../../.env)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+/** Thrown when SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing. */
+export class SupabaseNotConfiguredError extends Error {
+  constructor() {
+    super(
+      'Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the environment.',
+    );
+    this.name = 'SupabaseNotConfiguredError';
+    this.code = 'SUPABASE_NOT_CONFIGURED';
+  }
+}
+
+let cachedClient = null;
+
+function requireSupabaseEnv() {
+  const url = process.env.SUPABASE_URL?.trim();
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!url || !key) {
+    throw new SupabaseNotConfiguredError();
+  }
+  return { url, key };
+}
+
+/**
+ * Lazy Supabase client — no network/connect at import time.
+ */
+export function getSupabaseClient() {
+  const { url, key } = requireSupabaseEnv();
+  if (!cachedClient) {
+    cachedClient = createClient(url, key);
+  }
+  return cachedClient;
+}
 
 /**
  * Create a new debate row and return its generated UUID.
@@ -20,6 +47,7 @@ const supabase = createClient(
  * @returns {Promise<string>} The new debate's UUID.
  */
 export async function insertDebate(topic, personaCount = 5) {
+  const supabase = getSupabaseClient();
   const count = Number.isInteger(personaCount)
     ? Math.min(7, Math.max(3, personaCount))
     : 5;
@@ -38,6 +66,7 @@ export async function insertDebate(topic, personaCount = 5) {
  * Update a debate row with generated summary/verdict and optional vault path.
  */
 export async function updateDebateSummary(debateId, summary, verdict, obsidianPath) {
+  const supabase = getSupabaseClient();
   const { error } = await supabase
     .from('debates')
     .update({
@@ -55,6 +84,7 @@ export async function updateDebateSummary(debateId, summary, verdict, obsidianPa
  * Insert all personas for a debate and return { [name]: uuid }.
  */
 export async function insertPersonas(debateId, personasArray) {
+  const supabase = getSupabaseClient();
   const rows = personasArray.map((persona, index) => ({
     debate_id: debateId,
     name: persona.name,
@@ -82,6 +112,7 @@ export async function insertPersonas(debateId, personasArray) {
  * Insert all messages for a debate.
  */
 export async function insertMessages(debateId, messagesArray, personaIdMap) {
+  const supabase = getSupabaseClient();
   const rows = messagesArray.map((msg) => ({
     debate_id: debateId,
     persona_id: personaIdMap[msg.personaName],
@@ -108,6 +139,7 @@ export async function insertMessages(debateId, messagesArray, personaIdMap) {
  * @returns {Promise<{ debates: Array, total: number }>}
  */
 export async function fetchDebates(limit = 10, offset = 0) {
+  const supabase = getSupabaseClient();
   const { data, error, count } = await supabase
     .from('debates')
     .select('id, topic, persona_count, created_at, summary, verdict, obsidian_path', { count: 'exact' })
@@ -123,6 +155,7 @@ export async function fetchDebates(limit = 10, offset = 0) {
  * Fetch a single debate with associated personas and messages.
  */
 export async function fetchDebateById(id) {
+  const supabase = getSupabaseClient();
   const { data: debate, error: debateError } = await supabase
     .from('debates')
     .select('*')
@@ -155,6 +188,7 @@ export async function fetchDebateById(id) {
  * Search debates by topic.
  */
 export async function searchDebates(query, limit = 20) {
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('debates')
     .select('id, topic, persona_count, created_at, summary, verdict')
@@ -171,10 +205,22 @@ export async function searchDebates(query, limit = 20) {
  *
  * @returns {Promise<{ id: string }>}
  */
-export async function saveDebateToSupabase({ topic, personas, history, summary, verdict, obsidianPath }) {
+export async function saveDebateToSupabase({
+  topic,
+  personas,
+  history,
+  summary,
+  verdict,
+  obsidianPath,
+  personaCount: personaCountInput,
+}) {
   const safePersonas = Array.isArray(personas) ? personas : [];
   const safeHistory = Array.isArray(history) ? history : [];
-  const personaCount = safePersonas.length > 0 ? safePersonas.length : 5;
+  const personaCount = Number.isInteger(personaCountInput)
+    ? Math.min(7, Math.max(3, personaCountInput))
+    : safePersonas.length > 0
+      ? safePersonas.length
+      : 5;
 
   const debateId = await insertDebate(topic, personaCount);
   const personaIdMap = await insertPersonas(debateId, safePersonas);

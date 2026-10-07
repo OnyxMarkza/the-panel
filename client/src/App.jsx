@@ -10,9 +10,18 @@ import SummaryPanel from './components/SummaryPanel.jsx';
 import PanelBriefing from './components/PanelBriefing.jsx';
 import StatusBar from './components/StatusBar.jsx';
 import SharedDebateView from './components/SharedDebateView.jsx';
+import {
+  isSupabaseDebateId,
+  loadLocalDebateSnapshot,
+  saveLocalDebateSnapshot,
+} from './lib/localDebateStorage.js';
 
 const TOTAL_ROUNDS = 3;
 const DEFAULT_PERSONA_COUNT = 5;
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function DebateHome() {
   const [topic, setTopic] = useState('');
@@ -182,18 +191,41 @@ function DebateHome() {
     }
   }
 
+  function hydrateFromLocalSnapshot(snapshot) {
+    setTopic(snapshot.topic || '');
+    setPersonaCount(snapshot.persona_count ?? DEFAULT_PERSONA_COUNT);
+    setPersonas(Array.isArray(snapshot.personas) ? snapshot.personas : []);
+    setHistory(Array.isArray(snapshot.history) ? snapshot.history : []);
+    setSummary(snapshot.summary || '');
+    setVerdict(snapshot.verdict || '');
+    setSavedPath(snapshot.savedPath || '');
+    setTypingIndex(-1);
+    setCurrentRound(TOTAL_ROUNDS);
+    setPhase('done');
+    setIsActive(false);
+    setShareUrl('');
+    setStatus('Local debate loaded.');
+    window.history.replaceState({}, '', '/');
+  }
+
   async function handleSelectDebate(debateId) {
     setCurrentDebateId(debateId);
     if (!debateId) return;
 
-    if (typeof debateId === 'string') {
+    if (isSupabaseDebateId(debateId)) {
       window.history.replaceState({}, '', `/debate/${debateId}`);
       await loadDebateById(debateId);
       return;
     }
 
-    // Local-only entries (numeric IDs) do not have a shareable backend record.
+    const snapshot = loadLocalDebateSnapshot(debateId);
+    if (snapshot) {
+      hydrateFromLocalSnapshot(snapshot);
+      return;
+    }
+
     setShareUrl('');
+    setStatus('Could not find saved transcript for this debate.');
   }
 
   /**
@@ -320,6 +352,9 @@ function DebateHome() {
 
     safeSet(setStatus, 'Saving debate transcript...', requestId);
 
+    let returnedDebateId = null;
+    let returnedPath = '';
+
     try {
       safeSet(setStatus, 'Saving debate transcript...', requestId);
 
@@ -336,8 +371,8 @@ function DebateHome() {
         'Could not save debate.',
       );
 
-      const returnedDebateId = saveData.id || null;
-      const returnedPath = saveData.path || '';
+      returnedDebateId = saveData.id || null;
+      returnedPath = saveData.path || '';
 
       safeSet(setSavedPath, returnedPath, requestId);
       safeSet(setCurrentDebateId, returnedDebateId, requestId);
@@ -374,9 +409,31 @@ function DebateHome() {
     safeSet(setStatus, 'Debate complete.', requestId);
     inFlightRef.current = false;
 
-    const newDebate = { id: Date.now(), topic: normalizedTopic, date: new Date(), persona_count: normalizedCount };
+    const sidebarId = returnedDebateId ?? Date.now();
+    const newDebate = {
+      id: sidebarId,
+      topic: normalizedTopic,
+      date: new Date(),
+      persona_count: normalizedCount,
+    };
+
+    if (!returnedDebateId) {
+      saveLocalDebateSnapshot(sidebarId, {
+        topic: normalizedTopic,
+        personas: generatedPersonas,
+        history: currentHistory,
+        summary: debateSummary,
+        verdict: debateVerdict,
+        persona_count: normalizedCount,
+        savedPath: returnedPath ?? '',
+        date: newDebate.date,
+      });
+    }
+
     setDebates((prev) => [...prev, newDebate]);
-    setCurrentDebateId(newDebate.id);
+    if (!returnedDebateId) {
+      setCurrentDebateId(sidebarId);
+    }
   }
 
   const sidebarDebates = useMemo(
@@ -400,7 +457,7 @@ function DebateHome() {
           onToggle={() => setSidebarOpen((prev) => !prev)}
           debates={debates}
           currentDebateId={currentDebateId}
-          onSelectDebate={setCurrentDebateId}
+          onSelectDebate={handleSelectDebate}
         />
 
         <main className="main-content">
