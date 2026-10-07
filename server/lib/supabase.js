@@ -171,10 +171,22 @@ export async function searchDebates(query, limit = 20) {
  *
  * @returns {Promise<{ id: string }>}
  */
-export async function saveDebateToSupabase({ topic, personas, history, summary, verdict, obsidianPath }) {
+export async function saveDebateToSupabase({
+  topic,
+  personas,
+  history,
+  summary,
+  verdict,
+  obsidianPath,
+  personaCount: personaCountInput,
+}) {
   const safePersonas = Array.isArray(personas) ? personas : [];
   const safeHistory = Array.isArray(history) ? history : [];
-  const personaCount = safePersonas.length > 0 ? safePersonas.length : 5;
+  const personaCount = Number.isInteger(personaCountInput)
+    ? Math.min(7, Math.max(3, personaCountInput))
+    : safePersonas.length > 0
+      ? safePersonas.length
+      : 5;
 
   const debateId = await insertDebate(topic, personaCount);
   const personaIdMap = await insertPersonas(debateId, safePersonas);
