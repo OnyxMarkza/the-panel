@@ -4,16 +4,16 @@ import { PERSONA_COLOURS } from '../utils/personaColors.js';
 export default function PanelBriefing({ personas }) {
   const [expandedIndex, setExpandedIndex] = useState(null);
 
-  if (!Array.isArray(personas) || personas.length === 0 || !personas[0]?.stance) return null;
-
   const colourByName = useMemo(() => {
     const map = {};
-    personas.forEach((p, i) => {
+    (personas ?? []).forEach((p, i) => {
       const safeName = typeof p?.name === 'string' && p.name.trim() ? p.name : `Panellist ${i + 1}`;
       map[safeName] = PERSONA_COLOURS[i] ?? 'var(--text-primary)';
     });
     return map;
   }, [personas]);
+
+  if (!Array.isArray(personas) || personas.length === 0 || !personas[0]?.stance) return null;
 
   function toggleExpand(index) {
     setExpandedIndex((prev) => (prev === index ? null : index));

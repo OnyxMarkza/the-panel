@@ -14,6 +14,10 @@ import SharedDebateView from './components/SharedDebateView.jsx';
 const TOTAL_ROUNDS = 3;
 const DEFAULT_PERSONA_COUNT = 5;
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function DebateHome() {
   const [topic, setTopic] = useState('');
   const [personaCount, setPersonaCount] = useState(DEFAULT_PERSONA_COUNT);
@@ -320,6 +324,8 @@ function DebateHome() {
 
     safeSet(setStatus, 'Saving debate transcript...', requestId);
 
+    let returnedDebateId = null;
+
     try {
       safeSet(setStatus, 'Saving debate transcript...', requestId);
 
@@ -336,7 +342,7 @@ function DebateHome() {
         'Could not save debate.',
       );
 
-      const returnedDebateId = saveData.id || null;
+      returnedDebateId = saveData.id || null;
       const returnedPath = saveData.path || '';
 
       safeSet(setSavedPath, returnedPath, requestId);
@@ -374,9 +380,17 @@ function DebateHome() {
     safeSet(setStatus, 'Debate complete.', requestId);
     inFlightRef.current = false;
 
-    const newDebate = { id: Date.now(), topic: normalizedTopic, date: new Date(), persona_count: normalizedCount };
+    const sidebarId = returnedDebateId ?? Date.now();
+    const newDebate = {
+      id: sidebarId,
+      topic: normalizedTopic,
+      date: new Date(),
+      persona_count: normalizedCount,
+    };
     setDebates((prev) => [...prev, newDebate]);
-    setCurrentDebateId(newDebate.id);
+    if (!returnedDebateId) {
+      setCurrentDebateId(sidebarId);
+    }
   }
 
   const sidebarDebates = useMemo(
@@ -400,7 +414,7 @@ function DebateHome() {
           onToggle={() => setSidebarOpen((prev) => !prev)}
           debates={debates}
           currentDebateId={currentDebateId}
-          onSelectDebate={setCurrentDebateId}
+          onSelectDebate={handleSelectDebate}
         />
 
         <main className="main-content">
