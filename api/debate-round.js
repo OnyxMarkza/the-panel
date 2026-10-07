@@ -1,5 +1,8 @@
 import { callGroq } from '../shared/groqClient.js';
 import { parseDebateRoundRequest } from '../shared/debateRoundValidation.js';
+import { enforceApiKeyForVercel } from '../shared/apiAuth.js';
+import { enforceRateLimitForVercel, RATE_LIMITS } from '../shared/rateLimit.js';
+import { handleVercelOptions, setVercelCors } from '../shared/vercelCors.js';
 
 /**
  * Vercel serverless function: POST /api/debate-round
@@ -8,17 +11,15 @@ import { parseDebateRoundRequest } from '../shared/debateRoundValidation.js';
  * Each persona speaks sequentially, seeing all prior messages in the round.
  */
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  setVercelCors(req, res);
+  if (handleVercelOptions(req, res)) return;
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: true, message: 'Method not allowed.' });
   }
+
+  if (!enforceApiKeyForVercel(req, res)) return;
+  if (!enforceRateLimitForVercel(req, res, 'debate-round', RATE_LIMITS.debateRound)) return;
 
   const parsed = parseDebateRoundRequest(req.body);
   if (!parsed.ok) {

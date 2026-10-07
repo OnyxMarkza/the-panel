@@ -38,6 +38,22 @@ GROQ_API_KEY=your_key_here
 VAULT_ROOT=C:/Users/ngmat/OneDrive/Desktop/Obsidian vault
 ```
 
+### API authentication (production)
+
+Groq-backed routes (`/api/generate-personas`, `/api/debate-round`, `/api/summarise`, `/api/suggest-topics`), storage (`/api/save-to-database`), and Supabase debate list/read routes require a shared secret when deployed:
+
+| Variable | Purpose |
+|----------|---------|
+| `API_KEY` | Preferred shared secret for server routes (Express + Vercel). |
+| `SAVE_API_KEY` | Legacy alias; used if `API_KEY` is unset (Obsidian save route). |
+| `VITE_API_KEY` | Same value as `API_KEY`, exposed to the browser build so the SPA can send `x-api-key` on `/api/*` calls. |
+
+**Local development:** If neither `API_KEY` nor `SAVE_API_KEY` is set and `NODE_ENV` is not `production`, auth checks are skipped so `npm run dev` works without extra config.
+
+**Production (including Vercel):** Set `API_KEY` on the server and `VITE_API_KEY` to the same value at build time. Requests without a matching `x-api-key` header receive `401`. Public anonymous access to Groq/Supabase proxies is not supported until RLS + anon-key reads land (see security hardening plan).
+
+Rate limits (Express + best-effort Vercel): `generate-personas` — 3 requests / 5 minutes per IP; `debate-round` — 10 requests / 5 minutes per IP.
+
 ## Debates are saved to
 
 ```

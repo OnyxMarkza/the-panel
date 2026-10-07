@@ -1,14 +1,16 @@
 import { searchDebates } from '../../server/lib/supabase.js';
+import { enforceApiKeyForVercel } from '../../shared/apiAuth.js';
+import { mapSupabaseRouteError } from '../../shared/supabaseRouteErrors.js';
+import { handleVercelOptions, setVercelCors } from '../../shared/vercelCors.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  setVercelCors(req, res, 'GET, OPTIONS');
+  if (handleVercelOptions(req, res)) return;
   if (req.method !== 'GET') {
     return res.status(405).json({ error: true, message: 'Method not allowed.' });
   }
+
+  if (!enforceApiKeyForVercel(req, res)) return;
 
   const query = (req.query.q ?? '').trim();
   const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
@@ -22,6 +24,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ debates });
   } catch (err) {
     console.error('[api/debates/search] Error:', err.message);
-    return res.status(500).json({ error: true, message: err.message });
+    const mapped = mapSupabaseRouteError(err, 'Could not search debates.');
+    return res.status(mapped.status).json(mapped.body);
   }
 }

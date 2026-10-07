@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getApiHeaders } from '../lib/apiHeaders.js';
 import { Link, useParams } from 'react-router-dom';
 import PersonaCard from './PersonaCard.jsx';
 import DebateThread from './DebateThread.jsx';
@@ -21,7 +22,7 @@ export default function SharedDebateView() {
       setNotFound(false);
 
       try {
-        const response = await fetch(`/api/debates/${id}`);
+        const response = await fetch(`/api/debates/${id}`, { headers: getApiHeaders() });
         const payload = await response.json().catch(() => ({}));
 
         if (!response.ok || payload?.error) {

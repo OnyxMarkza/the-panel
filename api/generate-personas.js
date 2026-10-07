@@ -1,4 +1,7 @@
 import { callGroq } from '../shared/groqClient.js';
+import { enforceApiKeyForVercel } from '../shared/apiAuth.js';
+import { enforceRateLimitForVercel, RATE_LIMITS } from '../shared/rateLimit.js';
+import { handleVercelOptions, setVercelCors } from '../shared/vercelCors.js';
 
 const DEFAULT_PERSONA_COUNT = 5;
 const MIN_PERSONA_COUNT = 3;
@@ -23,17 +26,15 @@ function extractErrorMessage(err) {
  * Vercel serverless function: POST /api/generate-personas
  */
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  setVercelCors(req, res);
+  if (handleVercelOptions(req, res)) return;
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: true, message: 'Method not allowed.' });
   }
+
+  if (!enforceApiKeyForVercel(req, res)) return;
+  if (!enforceRateLimitForVercel(req, res, 'generate-personas', RATE_LIMITS.generatePersonas)) return;
 
   const topic = typeof req.body?.topic === 'string' ? req.body.topic.trim() : '';
   const personaCount = normalizeCount(req.body?.count);

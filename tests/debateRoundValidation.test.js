@@ -31,12 +31,41 @@ describe('debateRoundValidation', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('parseDebateRoundRequest accepts valid body', () => {
+  it('parseDebateRoundRequest rejects too few personas', () => {
     const result = parseDebateRoundRequest({
       topic: 'Climate policy',
       personas: [{ name: 'Sam', archetype: 'Analyst', bias: 'neutral', tone: 'sharp' }],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(422);
+  });
+
+  it('parseDebateRoundRequest rejects topic over max length', () => {
+    const result = parseDebateRoundRequest({
+      topic: 'x'.repeat(101),
+      personas: Array.from({ length: 3 }, (_, i) => ({
+        name: `P${i}`,
+        archetype: 'A',
+        bias: 'b',
+        tone: 't',
+      })),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(422);
+  });
+
+  it('parseDebateRoundRequest accepts valid body', () => {
+    const personas = Array.from({ length: 3 }, (_, i) => ({
+      name: `Person ${i}`,
+      archetype: 'Analyst',
+      bias: 'neutral',
+      tone: 'sharp',
+    }));
+    const result = parseDebateRoundRequest({
+      topic: 'Climate policy',
+      personas,
       roundNumber: '2',
-      history: [{ persona: 'Sam', content: 'Earlier point.' }],
+      history: [{ persona: 'Person 0', content: 'Earlier point.' }],
     });
     expect(result.ok).toBe(true);
     expect(result.topic).toBe('Climate policy');

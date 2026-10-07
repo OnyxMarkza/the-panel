@@ -1,4 +1,6 @@
 import { callGroq } from '../shared/groqClient.js';
+import { enforceApiKeyForVercel } from '../shared/apiAuth.js';
+import { handleVercelOptions, setVercelCors } from '../shared/vercelCors.js';
 
 /**
  * Vercel serverless function: POST /api/summarise
@@ -7,17 +9,14 @@ import { callGroq } from '../shared/groqClient.js';
  * Asks Groq to act as a neutral moderator and synthesise the debate.
  */
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  setVercelCors(req, res);
+  if (handleVercelOptions(req, res)) return;
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: true, message: 'Method not allowed.' });
   }
+
+  if (!enforceApiKeyForVercel(req, res)) return;
 
   const { topic, history } = req.body;
 

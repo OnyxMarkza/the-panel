@@ -10,6 +10,7 @@ import SummaryPanel from './components/SummaryPanel.jsx';
 import PanelBriefing from './components/PanelBriefing.jsx';
 import StatusBar from './components/StatusBar.jsx';
 import SharedDebateView from './components/SharedDebateView.jsx';
+import { getApiHeaders } from './lib/apiHeaders.js';
 import {
   isSupabaseDebateId,
   loadLocalDebateSnapshot,
@@ -126,7 +127,7 @@ function DebateHome() {
     try {
       response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
@@ -164,7 +165,7 @@ function DebateHome() {
     setIsActive(true);
 
     try {
-      const res = await fetch(`/api/debates/${debateId}`);
+      const res = await fetch(`/api/debates/${debateId}`, { headers: getApiHeaders() });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.message || 'Unable to load debate.');
 

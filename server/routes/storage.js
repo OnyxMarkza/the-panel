@@ -8,7 +8,7 @@ const router = Router();
  * Express mirror of the Vercel serverless endpoint in api/save-to-database.js.
  */
 router.post('/save-to-database', async (req, res) => {
-  const { topic, personas, history, summary, verdict } = req.body;
+  const { topic, personas, history, summary, verdict, persona_count } = req.body;
 
   if (!topic || !history || !summary) {
     return res.status(400).json({
@@ -17,7 +17,14 @@ router.post('/save-to-database', async (req, res) => {
     });
   }
 
-  const result = await saveBattle({ topic, personas, history, summary, verdict });
+  const result = await saveBattle({
+    topic,
+    personas,
+    history,
+    summary,
+    verdict,
+    persona_count,
+  });
   return res.status(200).json(result);
 });
 
